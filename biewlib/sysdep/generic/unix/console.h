@@ -18,7 +18,7 @@
 /*
     Copyright (C) 1999-2002 Konstantin Boldyshev <konst@linuxassembly.org>
 
-    $Id: console.h,v 1.4 2002/01/04 08:23:28 konst Exp $
+    $Id: console.h,v 1.5 2002/01/28 06:58:23 konst Exp $
 */
 
 #ifndef	__CONSOLE_H
@@ -47,7 +47,7 @@
     can we use SIGIO?
 */
 
-#if defined (_VT100_) && !defined(__BEOS__)
+#if defined (_VT100_) && !defined(__DISABLE_SIGIO)
 #define __ENABLE_SIGIO
 #endif
 
