@@ -14,7 +14,7 @@
 # given in the file "Licence.en" ("Licence.ru" in russian translation)       #
 # distributed in the BIEW archive.                                           #
 ##############################################################################
-# $Id: makefile.inc,v 1.7 2002/12/11 17:19:40 nickols_k Exp $
+# $Id: makefile.inc,v 1.8 2004/03/09 07:23:09 nickols_k Exp $
 ##############################################################################
 # ATTENTION!!! I use manual method configuring of BIEW project rather than   #
 # 'configure' script technology, because 'configure' script does not work    #
@@ -324,9 +324,9 @@ endif
 ifeq ($(findstring debug,$(compilation)),debug)
 CFLAGS += -g3 -p
 # Was detected problem with pgcc so temporary disable those keys
-ifeq ($(findstring unix,$(TARGET_OS)),unix)
-CFLAGS += -p -ax
-endif
+#ifeq ($(findstring unix,$(TARGET_OS)),unix)
+#CFLAGS += -p -ax
+#endif
 ifeq ($(compilation),max_debug)
 CFLAGS += -fcheck-memory-usage -fstack-check
 CDEFOS += -D__DISABLE_ASM -DDEBUG -UNDEBUG
