@@ -1,4 +1,4 @@
-/** 
+/**
  * @namespace   biewlib
  * @file        biewlib/sysdep/generic/unix/console.h
  * @brief       unix console internals
@@ -18,7 +18,7 @@
 /*
     Copyright (C) 1999-2001 Konstantin Boldyshev <konst@linuxassembly.org>
 
-    $Id: console.h,v 1.1 2001/11/18 17:05:48 nickols_k Exp $
+    $Id: console.h,v 1.2 2001/12/16 22:51:05 konst Exp $
 */
 
 #ifndef	__CONSOLE_H
@@ -129,8 +129,6 @@
 extern int on_console, terminal, transparent, do_nls;
 extern tBool break_status;
 
-#define TESTFLAG(x,y) (((x) & y) == y)
-
 typedef struct {
     int x;
     int y;
@@ -185,5 +183,7 @@ extern Console console;
 #define	__vioGetCursorType	console.GetCursorType
 #define	__vioSetCursorType	console.SetCursorType
 */
+
+#define TESTFLAG(x,y) (((x) & y) == y)	/* this define should be in other header */
 
 #endif	/* __CONSOLE_H */

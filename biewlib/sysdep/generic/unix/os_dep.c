@@ -18,11 +18,11 @@
 /*
     Copyright (C) 1999-2001 Konstantin Boldyshev <konst@linuxassembly.org>
 
-    $Id: os_dep.c,v 1.1 2001/11/18 17:05:48 nickols_k Exp $
+    $Id: os_dep.c,v 1.2 2001/12/16 22:51:05 konst Exp $
 */
 
 #ifndef lint
-static const char rcs_id[] = "$Id: os_dep.c,v 1.1 2001/11/18 17:05:48 nickols_k Exp $";
+static const char rcs_id[] = "$Id: os_dep.c,v 1.2 2001/12/16 22:51:05 konst Exp $";
 #endif
 
 #include <stdio.h>
@@ -39,7 +39,7 @@ static const char rcs_id[] = "$Id: os_dep.c,v 1.1 2001/11/18 17:05:48 nickols_k 
 #include "console.h"
 
 #ifndef	PREFIX
-#define	PREFIX	"/usr"
+#define	PREFIX	"/usr/local"
 #endif
 
 #ifndef	DATADIR
@@ -51,7 +51,7 @@ static char _rc_dir_name[FILENAME_MAX + 1];
 
 int terminal = TERM_UNKNOWN;
 
-tBool break_status = False;	/**< break flag */
+tBool break_status = False;	/**< CTRL+BREAK flag */
 extern void ReadNextEvent(void);
 
 static struct {
@@ -81,7 +81,7 @@ char * __FASTCALL__ __get_ini_name(const char *progname)
 	if (psw != NULL) p = psw->pw_dir;
     }	
 
-    if (p == NULL || strlen(p) > FILENAME_MAX - 10)
+    if (p == NULL || strlen(p) > FILENAME_MAX - (strlen(progname) + 4))
 	p = "/tmp";
 
     strcpy(_ini_name, p);
@@ -113,10 +113,8 @@ void  __FASTCALL__ __OsSetCBreak(tBool state)
 
 void __FASTCALL__ __OsYield(void)
 {
-/*
-	usleep(10000);
-*/
 #ifdef	__BEOS__
+    /* usleep(10000); */
 #else
     struct timespec t = { 0, 100000 };
     nanosleep(&t, NULL);

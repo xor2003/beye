@@ -1,4 +1,4 @@
-/** 
+/**
  * @namespace   biewlib
  * @file        biewlib/sysdep/ia32/linux/keyboard.c
  * @brief       Linux direct console / vt100 keyboard library
@@ -18,11 +18,11 @@
 /*
     Copyright (C) 1999-2001 Konstantin Boldyshev <konst@linuxassembly.org>
 
-    $Id: keyboard.c,v 1.1 2001/11/18 17:05:48 nickols_k Exp $
+    $Id: keyboard.c,v 1.2 2001/12/16 22:51:05 konst Exp $
 */
 
 #ifndef lint
-static const char rcs_id[] = "$Id: keyboard.c,v 1.1 2001/11/18 17:05:48 nickols_k Exp $";
+static const char rcs_id[] = "$Id: keyboard.c,v 1.2 2001/12/16 22:51:05 konst Exp $";
 #endif
 
 #include <errno.h>
@@ -233,7 +233,7 @@ static eseq S[SEQ_NUM] = {
 {'[', '2', '^', (p1seq *)seq8 },
 };
 
-mevent mouse = {0, 0, 0, 0};
+static mevent mouse = {0, 0, 0, 0};
 
 /*
 

@@ -1,4 +1,4 @@
-/** 
+/**
  * @namespace   biewlib
  * @file        biewlib/sysdep/generic/linux/vio.c
  * @brief       general implementation of video i/o functions for linux.
@@ -18,11 +18,11 @@
 /*
     Copyright (C) 1999-2001 Konstantin Boldyshev <konst@linuxassembly.org>
 
-    $Id: vio.c,v 1.1 2001/11/18 17:05:48 nickols_k Exp $
+    $Id: vio.c,v 1.2 2001/12/16 22:51:05 konst Exp $
 */
 
 #ifndef lint
-static const char rcs_id[] = "$Id: vio.c,v 1.1 2001/11/18 17:05:48 nickols_k Exp $";
+static const char rcs_id[] = "$Id: vio.c,v 1.2 2001/12/16 22:51:05 konst Exp $";
 #endif
 
 #define _XOPEN_SOURCE 500
@@ -82,7 +82,7 @@ static unsigned char frames_dumb[0x30] =
 #define _2color(x) __Xlat__(__ansi_color, (x) & 7)
 /* #define _2color(x) (char)__ansi_color[((x) & 7)] */
 
-struct {
+static struct {
     unsigned char last;
     unsigned char color[0x10];
 } tp = { 0 };

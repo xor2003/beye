@@ -1,4 +1,4 @@
-/** 
+/**
  * @namespace   biewlib
  * @file        biewlib/sysdep/generic/unix/keyboard.c
  * @brief       slang/curses/vt100 keyboard library
@@ -18,11 +18,11 @@
 /*
     Copyright (C) 1999-2001 Konstantin Boldyshev <konst@linuxassembly.org>
 
-    $Id: keyboard.c,v 1.1 2001/11/18 17:05:48 nickols_k Exp $
+    $Id: keyboard.c,v 1.2 2001/12/16 22:51:05 konst Exp $
 */
 
 #ifndef lint
-static const char rcs_id[] = "$Id: keyboard.c,v 1.1 2001/11/18 17:05:48 nickols_k Exp $";
+static const char rcs_id[] = "$Id: keyboard.c,v 1.2 2001/12/16 22:51:05 konst Exp $";
 #endif
 
 #include <errno.h>
@@ -206,7 +206,7 @@ static struct {
     mouse event
 */
 
-mevent mouse = {0, 0, 0, 0};
+static mevent mouse = {0, 0, 0, 0};
 
 static int	shift_status = 0;	/**< status of shift keys */
 static tBool	mouse_status = True;	/**< mouse state */
@@ -474,11 +474,11 @@ void __FASTCALL__ __init_keyboard(void)
 #ifdef	_CURSES_
     raw();
     noecho();
-    intrflush(stdscr,FALSE);
-    meta(stdscr,TRUE);
+    intrflush(stdscr, FALSE);
+    meta(stdscr, TRUE);
     keypad(stdscr, TRUE);
-    nodelay(stdscr,TRUE);
-/*    notimeout(stdscr,TRUE); */
+    nodelay(stdscr, TRUE);
+/*    notimeout(stdscr,TRUE); */ /* somewhy it blocks read function */
 #ifdef NCURSES_MOUSE_VERSION
     mousemask(REPORT_MOUSE_POSITION | ALL_MOUSE_EVENTS, NULL);
 #endif
