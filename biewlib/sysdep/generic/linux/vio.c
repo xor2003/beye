@@ -22,11 +22,11 @@
 /*
     Copyright (C) 1999-2002 Konstantin Boldyshev <konst@linuxassembly.org>
 
-    $Id: vio.c,v 1.8 2003/07/24 07:19:18 andrew_golovnia Exp $
+    $Id: vio.c,v 1.9 2004/05/07 05:51:54 nickols_k Exp $
 */
 
 #ifndef lint
-static const char rcs_id[] = "$Id: vio.c,v 1.8 2003/07/24 07:19:18 andrew_golovnia Exp $";
+static const char rcs_id[] = "$Id: vio.c,v 1.9 2004/05/07 05:51:54 nickols_k Exp $";
 #endif
 
 #define _XOPEN_SOURCE 500
@@ -36,6 +36,7 @@ static const char rcs_id[] = "$Id: vio.c,v 1.8 2003/07/24 07:19:18 andrew_golovn
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
+#define __USE_BSD
 #include <string.h>
 #include <unistd.h>
 #include <sys/types.h>

@@ -18,11 +18,11 @@
 /*
     Copyright (C) 1999-2001 Konstantin Boldyshev <konst@linuxassembly.org>
 
-    $Id: keyboard.c,v 1.5 2003/06/26 15:48:31 nickols_k Exp $
+    $Id: keyboard.c,v 1.6 2004/05/07 05:51:55 nickols_k Exp $
 */
 
 #ifndef lint
-static const char rcs_id[] = "$Id: keyboard.c,v 1.5 2003/06/26 15:48:31 nickols_k Exp $";
+static const char rcs_id[] = "$Id: keyboard.c,v 1.6 2004/05/07 05:51:55 nickols_k Exp $";
 #endif
 
 #include <errno.h>
@@ -353,7 +353,7 @@ void __FASTCALL__ ReadNextEvent(void)
 		struct vt_stat vt;
 		int newvt;
 
-		if (ioctl(in_fd, VT_GETSTATE, &vt) != 0) goto c_end;
+		if (ioctl(in_fd, VT_GETSTATE, &vt) != 0) goto place_key;
 		switch (key) {
 		    case KE_F(1): newvt = 1; break;
 		    case KE_F(2): newvt = 2; break;
@@ -362,16 +362,15 @@ void __FASTCALL__ ReadNextEvent(void)
 		    case KE_F(5): newvt = 5; break;
 		    case KE_F(6): newvt = 6; break;
 		    case KE_F(7): newvt = 7; break;
-		    default: goto c_end;
+		    default: goto place_key;
 		}
 
 		if (vt.v_active != newvt) {
-		    if (ioctl(in_fd, VT_ACTIVATE, newvt) != 0) goto c_end;
+		    if (ioctl(in_fd, VT_ACTIVATE, newvt) != 0) goto place_key;
 		    console_restart = 0;
 		    while (!console_restart) __OsYield();
 		}
 	    }
-c_end:
         } else {
 /*
     VT100 emulation

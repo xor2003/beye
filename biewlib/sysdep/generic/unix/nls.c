@@ -23,13 +23,14 @@
 /*
     Copyright (C) 1999-2001 Konstantin Boldyshev <konst@linuxassembly.org>
 
-    $Id: nls.c,v 1.6 2004/02/09 17:56:14 nickols_k Exp $
+    $Id: nls.c,v 1.7 2004/05/07 05:51:54 nickols_k Exp $
 */
 
 #ifndef lint
-static const char copyright[] = "$Id: nls.c,v 1.6 2004/02/09 17:56:14 nickols_k Exp $";
+static const char copyright[] = "$Id: nls.c,v 1.7 2004/05/07 05:51:54 nickols_k Exp $";
 #endif
 
+#include <stdlib.h>
 #include <stddef.h>
 #include "biewlib/biewlib.h"
 
