@@ -18,11 +18,11 @@
 /*
     Copyright (C) 1999-2001 Konstantin Boldyshev <konst@linuxassembly.org>
 
-    $Id: keyboard.c,v 1.4 2002/06/12 06:32:43 konst Exp $
+    $Id: keyboard.c,v 1.5 2003/06/26 15:48:30 nickols_k Exp $
 */
 
 #ifndef lint
-static const char rcs_id[] = "$Id: keyboard.c,v 1.4 2002/06/12 06:32:43 konst Exp $";
+static const char rcs_id[] = "$Id: keyboard.c,v 1.5 2003/06/26 15:48:30 nickols_k Exp $";
 #endif
 
 #include <errno.h>
@@ -37,15 +37,27 @@ static const char rcs_id[] = "$Id: keyboard.c,v 1.4 2002/06/12 06:32:43 konst Ex
 
 #ifdef	_SLANG_
 #include <slang.h>
+char *rawkb_name="Slang";
+unsigned rawkb_size=sizeof(int); /* size of rawkb_buf elements 1,2 or 4*/
+int rawkb_method=0;
 #undef	HAVE_MOUSE
 #endif
 
 #ifdef	_CURSES_
 #include <curses.h>
+char *rawkb_name="Curses";
+unsigned rawkb_size=sizeof(int); /* size of rawkb_buf elements 1,2 or 4*/
+int rawkb_method=0;
 #if defined(NCURSES_MOUSE_VERSION) && !defined(HAVE_MOUSE)
 #define	HAVE_MOUSE
 #endif
 #endif
+
+char rawkb_buf[100];
+unsigned rawkb_len; /* length of rawkb_buf*/
+unsigned rawkb_size; /* size of rawkb_buf elements 1,2 or 4*/
+unsigned rawkb_mode=0;
+int rawkb_escape;
 
 #ifdef	_VT100_
 
@@ -53,7 +65,9 @@ static const char rcs_id[] = "$Id: keyboard.c,v 1.4 2002/06/12 06:32:43 konst Ex
 #include <termios.h>
 #include <unistd.h>
 #include <sys/time.h>
-
+char *rawkb_name="VT100";
+unsigned rawkb_size=sizeof(char); /* size of rawkb_buf elements 1,2 or 4*/
+int rawkb_method=1;
 #ifndef STDIN_FILENO
 #define STDIN_FILENO 0
 #endif
@@ -251,34 +265,44 @@ void __FASTCALL__ ReadNextEvent(void)
 	SLang_ungetkey(key);
 	key = SLkp_getkey();
     }
-
+    if(rawkb_mode)
+    {
+	rawkb_buf[0]=key;
+	rawkb_len=1;
+    }
     switch(key) {
-	case SL_KEY_ERR		: return;
-	case KE_STATUS_RESET	: set_s(0);
-	case KE_STATUS_ALT	: set_s(KS_ALT);
-	case KE_STATUS_SHIFT	: set_s(KS_SHIFT);
-	case KE_STATUS_CONTROL	: set_s(KS_CTRL);
+	case SL_KEY_ERR		: return; /* don't reset rawkb_mode here */
+	case KE_STATUS_RESET	: if(!rawkb_mode) { set_s(0); } else { rawkb_mode=0; return; }
+	case KE_STATUS_ALT	: if(!rawkb_mode) { set_s(KS_ALT); } else { rawkb_mode=0; return; }
+	case KE_STATUS_SHIFT	: if(!rawkb_mode) { set_s(KS_SHIFT); } else { rawkb_mode=0; return; }
+	case KE_STATUS_CONTROL	: if(!rawkb_mode) { set_s(KS_CTRL); } else { rawkb_mode=0; return; }
 	case KE_ENTER2		: key = KE_ENTER; break;
 	case KE_BKSPACE1	: key = KE_BKSPACE; break;
 	case KE_BKSPACE2	: key = KE_BKSPACE; break;
 	case KE_C_O		: key = KE_CTL_(O); break;
-	case 0			: ret(0);
+	case 0			: if(!rawkb_mode) { ret(0); } else { rawkb_mode=0; return; }
     }
     goto place_key;
 #endif
 
 #ifdef	_CURSES_
-    key = getch(); switch(key) {
-	case ERR		: return;
-	case KE_STATUS_RESET	: set_s(0);
-	case KE_STATUS_ALT	: set_s(KS_ALT);
-	case KE_STATUS_SHIFT	: set_s(KS_SHIFT);
-	case KE_STATUS_CONTROL	: set_s(KS_CTRL);
+    key = getch();
+    if(rawkb_mode)
+    {
+	rawkb_buf[0]=key;
+	rawkb_len=1;
+    }
+    switch(key) {
+	case ERR		: return; /* don't reset rawkb_mode here */
+	case KE_STATUS_RESET	: if(!rawkb_mode) { set_s(0); } else { rawkb_mode=0; return; }
+	case KE_STATUS_ALT	: if(!rawkb_mode) { set_s(KS_ALT); } else { rawkb_mode=0; return; }
+	case KE_STATUS_SHIFT	: if(!rawkb_mode) { set_s(KS_SHIFT); } else { rawkb_mode=0; return; }
+	case KE_STATUS_CONTROL	: if(!rawkb_mode) { set_s(KS_CTRL); } else { rawkb_mode=0; return; }
 	case KE_ENTER2		: key = KE_ENTER; break;
 	case KE_BKSPACE1	: key = KE_BKSPACE; break;
 	case KE_BKSPACE2	: key = KE_BKSPACE; break;
 	case KE_C_O		: key = KE_CTL_(O); break;
-	case 0			: ret(0);
+	case 0			: if(!rawkb_mode) { ret(0); } else { rawkb_mode=0; return; }
 #ifdef NCURSES_MOUSE_VERSION
         case KEY_MOUSE		:
 	    {
@@ -299,7 +323,7 @@ void __FASTCALL__ ReadNextEvent(void)
 		mouse.pressed = m;
 		if (!mouse.buttons) mouse.pressed = 0;
 
-		if (mouse.pressed) ret(KE_MOUSE);
+		if (mouse.pressed) { if(!rawkb_mode) { ret(KE_MOUSE); } else { rawkb_mode=0; return; } }
 	    }
 #endif
     }
@@ -343,19 +367,32 @@ void __FASTCALL__ ReadNextEvent(void)
 
     switch(c[0]) {
 	case KE_ESCAPE		: break;
-	case KE_STATUS_RESET	: set_s(0);
-	case KE_STATUS_ALT	: set_s(KS_ALT);
-	case KE_STATUS_SHIFT	: set_s(KS_SHIFT);
-	case KE_STATUS_CONTROL	: set_s(KS_CTRL);
+	case KE_STATUS_RESET	: if(!rawkb_mode) { set_s(0); } else { rawkb_mode=0; return; }
+	case KE_STATUS_ALT	: if(!rawkb_mode) { set_s(KS_ALT); } else { rawkb_mode=0; return; }
+	case KE_STATUS_SHIFT	: if(!rawkb_mode) { set_s(KS_SHIFT); } else { rawkb_mode=0; return; }
+	case KE_STATUS_CONTROL	: if(!rawkb_mode) { set_s(KS_CTRL); } else { rawkb_mode=0; return; }
 	case KE_ENTER2		: key = KE_ENTER; break;
 	case KE_BKSPACE2	: key = KE_BKSPACE; break;
 	case KE_C_O		: key = KE_CTL_(O); break;
-	case 0			: ret(0);
+	case 0			: if(!rawkb_mode) { ret(0); } else { rawkb_mode=0; return; }
 	default			: key = c[0];
     }
-    if (key) goto place_key;
+    if (key) 
+    {
+	if(rawkb_mode)
+	{
+	    rawkb_buf[0]=c[0];
+	    rawkb_len=1;
+	}
+	goto place_key;
+    }
     for (i = 1; i < SEQ_LEN - 1; i++)
 	 if(get(c[i]) < 0) break;
+    if(rawkb_mode)
+    {
+	memcpy(rawkb_buf,c,i);
+	rawkb_len=i;
+    }
     if (i < 3) {
 	key = c[0];
 	goto place_key;
@@ -403,7 +440,11 @@ void __FASTCALL__ ReadNextEvent(void)
 #endif
 
 place_key:
-    if (key) ret(key);
+    if (key)
+    {
+	if(!rawkb_mode) { ret(key); }
+	else { rawkb_escape=(key==KE_ESCAPE&&rawkb_len==1); rawkb_mode=0; }
+    }
 
 #undef set_s
 #undef ret
