@@ -18,11 +18,11 @@
 /*
     Copyright (C) 1999-2001 Konstantin Boldyshev <konst@linuxassembly.org>
 
-    $Id: vio.c,v 1.3 2001/12/25 09:41:02 konst Exp $
+    $Id: vio.c,v 1.4 2001/12/29 15:53:58 konst Exp $
 */
 
 #ifndef lint
-static const char rcs_id[] = "$Id: vio.c,v 1.3 2001/12/25 09:41:02 konst Exp $";
+static const char rcs_id[] = "$Id: vio.c,v 1.4 2001/12/29 15:53:58 konst Exp $";
 #endif
 
 #include <stdlib.h>
@@ -444,7 +444,9 @@ void __FASTCALL__ __init_vio(unsigned long flags)
 #endif
 
     console_flags = flags;
+
     output_7 = TESTFLAG(console_flags, __TVIO_FLG_USE_7BIT);
+    do_nls = 1;
 
 #ifdef	_SLANG_
     SLtt_get_terminfo();

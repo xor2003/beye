@@ -19,16 +19,16 @@
 /*
     Copyright (C) 1999-2001 Konstantin Boldyshev <konst@linuxassembly.org>
 
-    $Id: nls.c,v 1.3 2001/12/25 09:41:02 konst Exp $
+    $Id: nls.c,v 1.4 2001/12/29 15:53:58 konst Exp $
 */
 
 #ifndef lint
-static const char copyright[] = "$Id: nls.c,v 1.3 2001/12/25 09:41:02 konst Exp $";
+static const char copyright[] = "$Id: nls.c,v 1.4 2001/12/29 15:53:58 konst Exp $";
 #endif
 
 #include "biewlib/biewlib.h"
 
-int do_nls = 1;
+int do_nls = 0;
 
 static unsigned char alt2koi[] =
 {
@@ -57,5 +57,5 @@ void __FASTCALL__ __nls_OemToFs(unsigned char *buff, unsigned int len)
 
 void __FASTCALL__ __nls_CmdlineToOem(unsigned char *buff, unsigned int len)
 {
-    (void) buff, (void) len;
+    UNUSED(buff), UNUSED(len);
 }
