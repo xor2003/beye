@@ -18,11 +18,11 @@
 /*
     Copyright (C) 1999-2002 Konstantin Boldyshev <konst@linuxassembly.org>
 
-    $Id: vio.c,v 1.6 2003/05/28 15:04:37 nickols_k Exp $
+    $Id: vio.c,v 1.7 2003/05/31 05:46:38 nickols_k Exp $
 */
 
 #ifndef lint
-static const char rcs_id[] = "$Id: vio.c,v 1.6 2003/05/28 15:04:37 nickols_k Exp $";
+static const char rcs_id[] = "$Id: vio.c,v 1.7 2003/05/31 05:46:38 nickols_k Exp $";
 #endif
 
 #define _XOPEN_SOURCE 500
@@ -201,6 +201,8 @@ void __FASTCALL__ __vioWriteBuff(tAbsCoord x, tAbsCoord y, const tvioBuff *buff,
 	gotoxy(x, y);
 
 	dpb=pb;
+	memset(pb, 0, LEN(len));
+
 	for (i = 0; i < len; i++) {
 	    c = buff->chars[i];
 #define cp buff->oem_pg[i]
