@@ -18,11 +18,11 @@
 /*
     Copyright (C) 1999-2001 Konstantin Boldyshev <konst@linuxassembly.org>
 
-    $Id: keyboard.c,v 1.2 2001/12/16 22:51:05 konst Exp $
+    $Id: keyboard.c,v 1.3 2001/12/25 09:41:02 konst Exp $
 */
 
 #ifndef lint
-static const char rcs_id[] = "$Id: keyboard.c,v 1.2 2001/12/16 22:51:05 konst Exp $";
+static const char rcs_id[] = "$Id: keyboard.c,v 1.3 2001/12/25 09:41:02 konst Exp $";
 #endif
 
 #include <errno.h>
@@ -129,7 +129,7 @@ typedef struct {
     translatable sequences
 */
 
-const static pseq seq0 = {
+static const pseq seq0 = {
     {'A',KE_UPARROW},
     {'B',KE_DOWNARROW},
     {'C',KE_RIGHTARROW},
@@ -561,7 +561,11 @@ void __FASTCALL__ __init_keyboard(void)
 
 #ifdef	HAVE_MOUSE
     {
-	Gpm_Connect gc = { ~0, GPM_MOVE|GPM_HARD, 0, 0};
+	Gpm_Connect gc;
+
+	gc.eventMask = ~0;
+	gc.defaultMask = GPM_MOVE|GPM_HARD;
+	gc.minMod = gc.maxMod = 0;
 	gpmhandle = Gpm_Open(&gc, 0);
 	if (gpmhandle < 0) gpmhandle = 0;
     }

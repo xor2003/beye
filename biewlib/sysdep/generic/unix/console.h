@@ -18,7 +18,7 @@
 /*
     Copyright (C) 1999-2001 Konstantin Boldyshev <konst@linuxassembly.org>
 
-    $Id: console.h,v 1.2 2001/12/16 22:51:05 konst Exp $
+    $Id: console.h,v 1.3 2001/12/25 09:41:02 konst Exp $
 */
 
 #ifndef	__CONSOLE_H
@@ -128,6 +128,8 @@
 
 extern int on_console, terminal, transparent, do_nls;
 extern tBool break_status;
+
+extern void __FASTCALL__ ReadNextEvent(void);
 
 typedef struct {
     int x;

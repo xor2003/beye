@@ -18,11 +18,11 @@
 /*
     Copyright (C) 1999-2001 Konstantin Boldyshev <konst@linuxassembly.org>
 
-    $Id: vio.c,v 1.2 2001/12/16 22:51:05 konst Exp $
+    $Id: vio.c,v 1.3 2001/12/25 09:41:02 konst Exp $
 */
 
 #ifndef lint
-static const char rcs_id[] = "$Id: vio.c,v 1.2 2001/12/16 22:51:05 konst Exp $";
+static const char rcs_id[] = "$Id: vio.c,v 1.3 2001/12/25 09:41:02 konst Exp $";
 #endif
 
 #include <stdlib.h>
@@ -51,8 +51,7 @@ static unsigned char *viomem;
 static struct {
     unsigned char last;
     unsigned char color[0x10];
-} tp = { 0 };
-
+} tp = { 0, {0} };
 
 #ifdef	_SLANG_
 #include <slang.h>
@@ -119,7 +118,7 @@ static int _color[8] = {
     otherwise examine how acs_map called in your library.
 */
 
-#ifdef	NCURSES_VERSION
+#if defined(NCURSES_VERSION) && defined(NDEBUG)
 
 static unsigned char frames_vt100[0x30] =
 "aaaxuuukkuxkjjjkmvwtqnttmlvwtqnvvwwmmllnnjl00000";

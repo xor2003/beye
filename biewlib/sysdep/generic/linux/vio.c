@@ -18,11 +18,11 @@
 /*
     Copyright (C) 1999-2001 Konstantin Boldyshev <konst@linuxassembly.org>
 
-    $Id: vio.c,v 1.2 2001/12/16 22:51:05 konst Exp $
+    $Id: vio.c,v 1.3 2001/12/25 09:41:02 konst Exp $
 */
 
 #ifndef lint
-static const char rcs_id[] = "$Id: vio.c,v 1.2 2001/12/16 22:51:05 konst Exp $";
+static const char rcs_id[] = "$Id: vio.c,v 1.3 2001/12/25 09:41:02 konst Exp $";
 #endif
 
 #define _XOPEN_SOURCE 500
@@ -85,7 +85,7 @@ static unsigned char frames_dumb[0x30] =
 static struct {
     unsigned char last;
     unsigned char color[0x10];
-} tp = { 0 };
+} tp = { 0, {0} };
 
 static char *__FASTCALL__ _2ansi(unsigned char attr)
 {

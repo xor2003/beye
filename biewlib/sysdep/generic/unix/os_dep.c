@@ -18,11 +18,11 @@
 /*
     Copyright (C) 1999-2001 Konstantin Boldyshev <konst@linuxassembly.org>
 
-    $Id: os_dep.c,v 1.2 2001/12/16 22:51:05 konst Exp $
+    $Id: os_dep.c,v 1.3 2001/12/25 09:41:02 konst Exp $
 */
 
 #ifndef lint
-static const char rcs_id[] = "$Id: os_dep.c,v 1.2 2001/12/16 22:51:05 konst Exp $";
+static const char rcs_id[] = "$Id: os_dep.c,v 1.3 2001/12/25 09:41:02 konst Exp $";
 #endif
 
 #include <stdio.h>
@@ -52,11 +52,10 @@ static char _rc_dir_name[FILENAME_MAX + 1];
 int terminal = TERM_UNKNOWN;
 
 tBool break_status = False;	/**< CTRL+BREAK flag */
-extern void ReadNextEvent(void);
 
-static struct {
-    char *name;
-    char type;
+struct {
+    unsigned char *name;
+    unsigned char type;
 } termtab[] = {
 { "linux",	TERM_LINUX },
 { "console",	TERM_LINUX },
