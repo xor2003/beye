@@ -3,7 +3,7 @@
 
 	    Konstantin Boldyshev <konst@linuxassembly.org>
 
-	 $Id: unix.txt,v 1.1 2001/11/18 17:05:49 nickols_k Exp $
+	 $Id: unix.txt,v 1.2 2001/12/23 17:34:47 nickols_k Exp $
 
 	=====================================================
 
@@ -159,6 +159,10 @@ sorts of weirdness can happen.
 
 ChangeLog (Linux/UNIX)
 ----------------------
+
+5.3.1
+
+- Minor fixes
 
 5.3.0
 
