@@ -13,16 +13,20 @@
  * @author      Konstantin Boldyshev
  * @since       1999
  * @note        Development, fixes and improvements
-**/
+ * @author      Alexander Krisak and Andrew Golovnia
+ * @date        24.07.2003
+ * @note        Russian locales support: KOI-8, CP866, CP1251, ISO8859-5.
+ *              Tested at ASPLinux 7.3 and ASPLinux 9
+ **/
 
 /*
     Copyright (C) 1999-2002 Konstantin Boldyshev <konst@linuxassembly.org>
 
-    $Id: vio.c,v 1.7 2003/05/31 05:46:38 nickols_k Exp $
+    $Id: vio.c,v 1.8 2003/07/24 07:19:18 andrew_golovnia Exp $
 */
 
 #ifndef lint
-static const char rcs_id[] = "$Id: vio.c,v 1.7 2003/05/31 05:46:38 nickols_k Exp $";
+static const char rcs_id[] = "$Id: vio.c,v 1.8 2003/07/24 07:19:18 andrew_golovnia Exp $";
 #endif
 
 #define _XOPEN_SOURCE 500
@@ -61,7 +65,7 @@ int console_flags = 0, on_console = 0, output_7 = 0, transparent = 0;
 static unsigned char __ansi_color[8] = {0,4,2,6,1,5,3,7};
 static tAbsCoord saveX, saveY, firstX, firstY;
 static int cursor_type = __TVIO_CUR_NORM;
-static int viohandle, out_fd, initialized, output_G1 = 0;
+static int viohandle, out_fd, initialized, output_G1 = 0, no_frames = 0;
 
 static unsigned violen;
 static unsigned char *viomem;
@@ -209,7 +213,7 @@ void __FASTCALL__ __vioWriteBuff(tAbsCoord x, tAbsCoord y, const tvioBuff *buff,
 #define ca buff->attrs[i]
 
 	    if (cp && cp >= _PSMIN && cp <= _PSMAX) {
-		c = (output_7)	? __Xlat__(frames_dumb,cp - _PSMIN) :
+		c = (output_7 || no_frames) ? __Xlat__(frames_dumb,cp - _PSMIN) :
 		    (output_G1)	? __Xlat__(frames_vt100,cp - _PSMIN) : cp;
 /*
 		c = (output_7)	? frames_dumb[cp - _PSMIN] :
@@ -357,8 +361,16 @@ void __FASTCALL__ __init_vio(unsigned long flags)
 		if (transparent)
 		    twrite("\033(K\033)0");
 	    }
-	} else {
-	    twrite("\033(U");	/* set null mapping */
+	} else { char* lang;
+	    if (((lang = getenv("LANG")) != NULL) && 
+	        (strncmp(lang, "ru_", 3) == 0) &&
+	        (strcasecmp(lang, "ru_RU.utf8") != 0) &&
+	        (strcasecmp(lang, "ru_UA.utf8") != 0))
+	    {// twrite("\033(K\\033)K");/*set user defined mapping*/
+	      do_nls = 1;
+	      no_frames = 1;
+	    }
+	    else twrite("\033(U");	/* set null mapping */
 	}
     }
     initialized = 1;
