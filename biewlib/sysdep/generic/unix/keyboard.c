@@ -18,11 +18,11 @@
 /*
     Copyright (C) 1999-2001 Konstantin Boldyshev <konst@linuxassembly.org>
 
-    $Id: keyboard.c,v 1.3 2001/12/25 09:41:02 konst Exp $
+    $Id: keyboard.c,v 1.4 2002/06/12 06:32:43 konst Exp $
 */
 
 #ifndef lint
-static const char rcs_id[] = "$Id: keyboard.c,v 1.3 2001/12/25 09:41:02 konst Exp $";
+static const char rcs_id[] = "$Id: keyboard.c,v 1.4 2002/06/12 06:32:43 konst Exp $";
 #endif
 
 #include <errno.h>
@@ -521,6 +521,8 @@ void __FASTCALL__ __init_keyboard(void)
 	if (gpmhandle < 0) gpmhandle = 0;
     }
 #endif
+
+    keybuf.current = 0;
 
 #ifdef	__ENABLE_SIGIO
     /* everything is ready, start to receive SIGIO */
