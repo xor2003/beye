@@ -3,7 +3,7 @@
 
 	    Konstantin Boldyshev <konst@linuxassembly.org>
 
-	 $Id: unix.txt,v 1.8 2003/06/05 06:51:27 nickols_k Exp $
+	 $Id: unix.txt,v 1.9 2004/03/29 15:05:38 nickols_k Exp $
 
 	=====================================================
 
@@ -173,6 +173,11 @@ sorts of weirdness can happen.
 
 ChangeLog (UNIX)
 ----------------
+5.6.0
+- Add russian locales support in linux/unix systems (AG)
+- Fixed bug of block-device opening (Alex)
+- fixed bug of non repainting of bottom part of window under some
+  terminals (NK).	
 5.5.0
 - fixed bug of non repainting of bottom part of window under some
   vt100 terminals (NK).	
