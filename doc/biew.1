@@ -1,6 +1,6 @@
-.\"$Id: biew.1,v 1.2 2001/12/30 19:24:48 konst Exp $
+.\"$Id: biew.1,v 1.3 2002/04/07 05:05:35 konst Exp $
 .\"
-.TH biew 1 "$Date: 2001/12/30 19:24:48 $" "UNIX"
+.TH biew 1 "$Date: 2002/04/07 05:05:35 $" "UNIX"
 
 .SH NAME
 .I BIEW
@@ -54,7 +54,7 @@ display help screen
 
 .SH UNIX-specific features of BIEW
 
-1)  Key modifiers are re-mapped as:
+1)  Key modifiers in terminal mode are re-mapped as:
 
 .B CTRL+A
 =
@@ -77,8 +77,12 @@ acts as holding down
 resets modifiers to defaults. Modifiers are also reseted
 after any function key is pressed.
 
-2)  There are some limitations on output, i.e. you can't see all characters
-as they are (output is filtered to avoid unexpected behavior).
+[except for BIEW/LINUX in console mode]
+
+2)  There are several limitations on output in terminal mode, i.e. you can't see
+all characters as they are (output is filtered to avoid unexpected behavior).
+
+[except for BIEW/LINUX in console mode]
 
 3)  It is possible to use 7bit output.
 
