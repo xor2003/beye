@@ -22,11 +22,11 @@
 /*
     Copyright (C) 1999-2002 Konstantin Boldyshev <konst@linuxassembly.org>
 
-    $Id: vio.c,v 1.9 2004/05/07 05:51:54 nickols_k Exp $
+    $Id: vio.c,v 1.10 2006/09/05 16:20:30 nickols_k Exp $
 */
 
 #ifndef lint
-static const char rcs_id[] = "$Id: vio.c,v 1.9 2004/05/07 05:51:54 nickols_k Exp $";
+static const char rcs_id[] = "$Id: vio.c,v 1.10 2006/09/05 16:20:30 nickols_k Exp $";
 #endif
 
 #define _XOPEN_SOURCE 500
@@ -242,7 +242,7 @@ void __FASTCALL__ __vioWriteBuff(tAbsCoord x, tAbsCoord y, const tvioBuff *buff,
 	    
 	    if (!c) c = ' '; else if (!printable(c)) c = '.';
 
-	    if ((ca != buff->attrs[i - 1] && i) || i == len || !i)
+	    if (!i || (ca != buff->attrs[i - 1])) /* [dBorca] short-circuit */
 	    {
 		unsigned char *ptr;
 		ptr = _2ansi(ca);
