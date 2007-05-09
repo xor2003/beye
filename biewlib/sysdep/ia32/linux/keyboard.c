@@ -18,11 +18,11 @@
 /*
     Copyright (C) 1999-2001 Konstantin Boldyshev <konst@linuxassembly.org>
 
-    $Id: keyboard.c,v 1.8 2006/09/05 17:16:07 nickols_k Exp $
+    $Id: keyboard.c,v 1.9 2007/05/09 07:16:54 nickols_k Exp $
 */
 
 #ifndef lint
-static const char rcs_id[] = "$Id: keyboard.c,v 1.8 2006/09/05 17:16:07 nickols_k Exp $";
+static const char rcs_id[] = "$Id: keyboard.c,v 1.9 2007/05/09 07:16:54 nickols_k Exp $";
 #endif
 
 #include <errno.h>
@@ -536,8 +536,15 @@ int __FASTCALL__ __MsGetBtns(void)
 
 */
 
+static void
+dummy_handler (int sig)
+{
+    /*fprintf(stderr, "warning: received early %d\n", sig);*/
+}
+
 void __FASTCALL__ __init_keyboard(void)
 {
+    signal(SIGIO, dummy_handler);
     in_fd = open(ttyname(STDIN_FILENO), O_RDONLY);
     if (in_fd < 0) in_fd = STDIN_FILENO;
 
