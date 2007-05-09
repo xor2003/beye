@@ -18,11 +18,11 @@
 /*
     Copyright (C) 1999-2002 Konstantin Boldyshev <konst@linuxassembly.org>
 
-    $Id: os_dep.c,v 1.4 2002/01/04 08:23:28 konst Exp $
+    $Id: os_dep.c,v 1.5 2007/05/09 07:14:17 nickols_k Exp $
 */
 
 #ifndef lint
-static const char rcs_id[] = "$Id: os_dep.c,v 1.4 2002/01/04 08:23:28 konst Exp $";
+static const char rcs_id[] = "$Id: os_dep.c,v 1.5 2007/05/09 07:14:17 nickols_k Exp $";
 #endif
 
 #include <stdio.h>
@@ -43,7 +43,7 @@ static const char rcs_id[] = "$Id: os_dep.c,v 1.4 2002/01/04 08:23:28 konst Exp 
 #endif
 
 #ifndef	DATADIR
-#define DATADIR	PREFIX"/share"
+#define DATADIR	PREFIX"/share/biew"
 #endif
 
 tBool break_status = False;	/**< CTRL+BREAK flag */
@@ -88,8 +88,8 @@ char * __FASTCALL__ __get_ini_name(const char *progname)
 
 char * __FASTCALL__ __get_rc_dir(const char *progname)
 {
-    strcpy(_rc_dir_name, DATADIR"/");
-    strcat(_rc_dir_name, progname);
+    strcpy(_rc_dir_name, DATADIR);
+    /*strcat(_rc_dir_name, progname);*/
     return strcat(_rc_dir_name, "/");
 }
 
