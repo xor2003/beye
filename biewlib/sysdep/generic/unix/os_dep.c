@@ -22,11 +22,11 @@
 /*
     Copyright (C) 1999-2002 Konstantin Boldyshev <konst@linuxassembly.org>
 
-    $Id: os_dep.c,v 1.7 2009/01/09 10:24:56 nickols_k Exp $
+    $Id: os_dep.c,v 1.8 2009/01/09 17:06:26 nickols_k Exp $
 */
 
 #ifndef lint
-static const char rcs_id[] = "$Id: os_dep.c,v 1.7 2009/01/09 10:24:56 nickols_k Exp $";
+static const char rcs_id[] = "$Id: os_dep.c,v 1.8 2009/01/09 17:06:26 nickols_k Exp $";
 #endif
 
 #include <stdio.h>
@@ -233,15 +233,22 @@ static int iconv_inited=0;
 
 int nls_init(const char *to_cp,const char *src_cp) {
     errno=0;
+#ifdef HAVE_ICONV
     ic=iconv_open(to_cp,src_cp);
     if(errno) {
 	printm("ICONV(%s,%s): Open with error: %s\n",to_cp,src_cp,strerror(errno));
     }
     else iconv_inited=1;
+#endif
     return errno;
 }
 
-void nls_term(void) { iconv_close(ic); iconv_inited=0; }
+void nls_term(void) {
+#ifdef HAVE_ICONV
+ iconv_close(ic);
+#endif
+ iconv_inited=0;
+}
 
 char *nls_recode2screen_cp(const char *srcb,unsigned* len)
 {
