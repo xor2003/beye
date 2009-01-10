@@ -18,11 +18,11 @@
 /*
     Copyright (C) 1999-2002 Konstantin Boldyshev <konst@linuxassembly.org>
 
-    $Id: vio.c,v 1.10 2009/01/10 09:56:31 nickols_k Exp $
+    $Id: vio.c,v 1.11 2009/01/10 10:06:07 nickols_k Exp $
 */
 
 #ifndef lint
-static const char rcs_id[] = "$Id: vio.c,v 1.10 2009/01/10 09:56:31 nickols_k Exp $";
+static const char rcs_id[] = "$Id: vio.c,v 1.11 2009/01/10 10:06:07 nickols_k Exp $";
 #endif
 
 #include <stdlib.h>
@@ -482,7 +482,7 @@ void __FASTCALL__ __init_vio(const char *user_cp,unsigned long flags)
 
 #ifdef HAVE_ICONV
     screen_cp=nls_get_screen_cp();
-    if(strncmp(screen_cp,"UTF",3)==0) {
+    if(strncasecmp(screen_cp,"UTF",3)==0) {
 	is_unicode=1;
     }
     if(nls_init(screen_cp,user_cp)) is_unicode=0;

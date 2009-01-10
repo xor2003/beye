@@ -22,11 +22,11 @@
 /*
     Copyright (C) 1999-2002 Konstantin Boldyshev <konst@linuxassembly.org>
 
-    $Id: vio.c,v 1.15 2009/01/10 09:56:31 nickols_k Exp $
+    $Id: vio.c,v 1.16 2009/01/10 10:06:07 nickols_k Exp $
 */
 
 #ifndef lint
-static const char rcs_id[] = "$Id: vio.c,v 1.15 2009/01/10 09:56:31 nickols_k Exp $";
+static const char rcs_id[] = "$Id: vio.c,v 1.16 2009/01/10 10:06:07 nickols_k Exp $";
 #endif
 
 #define _XOPEN_SOURCE 500
@@ -354,7 +354,7 @@ void __FASTCALL__ __init_vio(const char *user_cp,unsigned long flags)
     }
 #ifdef HAVE_ICONV
     screen_cp=nls_get_screen_cp();
-    if(strncmp(screen_cp,"UTF",3)==0 && !on_console) {
+    if(strncasecmp(screen_cp,"UTF",3)==0 && !on_console) {
 	is_unicode=1;
     }
 #endif
