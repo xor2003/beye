@@ -22,11 +22,11 @@
 /*
     Copyright (C) 1999-2002 Konstantin Boldyshev <konst@linuxassembly.org>
 
-    $Id: vio.c,v 1.13 2009/01/09 17:08:39 nickols_k Exp $
+    $Id: vio.c,v 1.14 2009/01/10 09:35:23 nickols_k Exp $
 */
 
 #ifndef lint
-static const char rcs_id[] = "$Id: vio.c,v 1.13 2009/01/09 17:08:39 nickols_k Exp $";
+static const char rcs_id[] = "$Id: vio.c,v 1.14 2009/01/10 09:35:23 nickols_k Exp $";
 #endif
 
 #define _XOPEN_SOURCE 500
@@ -358,7 +358,7 @@ void __FASTCALL__ __init_vio(unsigned long flags)
 	is_unicode=1;
     }
 #endif
-    if(nls_init(screen_cp,"866")) return;
+    if(nls_init(screen_cp,"866")) is_unicode=0;
     if (!output_7) output_7 = TESTFLAG(console_flags, __TVIO_FLG_USE_7BIT);
     if (tvioWidth <= 0) tvioWidth = 80;
     if (tvioHeight <= 0) tvioHeight = 25;

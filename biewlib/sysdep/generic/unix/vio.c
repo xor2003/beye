@@ -18,11 +18,11 @@
 /*
     Copyright (C) 1999-2002 Konstantin Boldyshev <konst@linuxassembly.org>
 
-    $Id: vio.c,v 1.8 2009/01/09 17:06:26 nickols_k Exp $
+    $Id: vio.c,v 1.9 2009/01/10 09:35:23 nickols_k Exp $
 */
 
 #ifndef lint
-static const char rcs_id[] = "$Id: vio.c,v 1.8 2009/01/09 17:06:26 nickols_k Exp $";
+static const char rcs_id[] = "$Id: vio.c,v 1.9 2009/01/10 09:35:23 nickols_k Exp $";
 #endif
 
 #include <stdlib.h>
@@ -485,7 +485,7 @@ void __FASTCALL__ __init_vio(unsigned long flags)
     if(strncmp(screen_cp,"UTF",3)==0) {
 	is_unicode=1;
     }
-    if(nls_init(screen_cp,"866")) return;
+    if(nls_init(screen_cp,"866")) is_unicode=0;
 #endif
     console_flags = flags;
 
