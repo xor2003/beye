@@ -18,11 +18,11 @@
 /*
     Copyright (C) 1999-2001 Konstantin Boldyshev <konst@linuxassembly.org>
 
-    $Id: keyboard.c,v 1.10 2009/01/31 11:08:22 nickols_k Exp $
+    $Id: keyboard.c,v 1.11 2009/01/31 11:11:34 nickols_k Exp $
 */
 
 #ifndef lint
-static const char rcs_id[] = "$Id: keyboard.c,v 1.10 2009/01/31 11:08:22 nickols_k Exp $";
+static const char rcs_id[] = "$Id: keyboard.c,v 1.11 2009/01/31 11:11:34 nickols_k Exp $";
 #endif
 
 #include <errno.h>
@@ -273,6 +273,7 @@ static void __FASTCALL__ pushEvent(unsigned _event)
 		eptr[0]=destb[i];
 	    }
 	    utf_ptr=0;
+	    free(destb);
 	}
     }
 #endif
