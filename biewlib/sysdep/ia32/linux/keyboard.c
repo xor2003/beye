@@ -18,11 +18,11 @@
 /*
     Copyright (C) 1999-2001 Konstantin Boldyshev <konst@linuxassembly.org>
 
-    $Id: keyboard.c,v 1.11 2009/01/31 11:11:34 nickols_k Exp $
+    $Id: keyboard.c,v 1.12 2009/01/31 11:37:29 nickols_k Exp $
 */
 
 #ifndef lint
-static const char rcs_id[] = "$Id: keyboard.c,v 1.11 2009/01/31 11:11:34 nickols_k Exp $";
+static const char rcs_id[] = "$Id: keyboard.c,v 1.12 2009/01/31 11:37:29 nickols_k Exp $";
 #endif
 
 #include <errno.h>
@@ -262,6 +262,9 @@ static void __FASTCALL__ pushEvent(unsigned _event)
 	    len=utf_ptr+1;
 	    if((err=nls_test(nls_handle,utf_buff,&len))!=0) {
 		utf_ptr++;
+		/* on incompelete input we need to raise
+		   new loop of console reading */
+		raise(SIGIO);
 		return;
 	    }
 	    len=utf_ptr+1;
