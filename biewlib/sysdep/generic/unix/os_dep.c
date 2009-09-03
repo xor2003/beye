@@ -4,7 +4,7 @@
  * @brief       This file contains implementation of unix compatible OS dependent part.
  * @version     -
  * @remark      this source file is part of Binary vIEW project (BIEW).
- *              The Binary vIEW (BIEW) is copyright (C) 1995 Nick Kurshev.
+ *              The Binary vIEW (BIEW) is copyright (C) 1995 Nickols_K.
  *              All rights reserved. This software is redistributable under the
  *              licence given in the file "Licence.en" ("Licence.ru" in russian
  *              translation) distributed in the BIEW archive.
@@ -22,11 +22,11 @@
 /*
     Copyright (C) 1999-2002 Konstantin Boldyshev <konst@linuxassembly.org>
 
-    $Id: os_dep.c,v 1.9 2009/01/10 09:20:57 nickols_k Exp $
+    $Id: os_dep.c,v 1.10 2009/09/03 16:57:40 nickols_k Exp $
 */
 
 #ifndef lint
-static const char rcs_id[] = "$Id: os_dep.c,v 1.9 2009/01/10 09:20:57 nickols_k Exp $";
+static const char rcs_id[] = "$Id: os_dep.c,v 1.10 2009/09/03 16:57:40 nickols_k Exp $";
 #endif
 
 #include <stdio.h>

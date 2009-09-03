@@ -4,7 +4,7 @@
  * @brief       general implementation of video i/o functions for linux.
  * @version     -
  * @remark      this source file is part of Binary vIEW project (BIEW).
- *              The Binary vIEW (BIEW) is copyright (C) 1995 Nick Kurshev.
+ *              The Binary vIEW (BIEW) is copyright (C) 1995 Nickols_K.
  *              All rights reserved. This software is redistributable under the
  *              licence given in the file "Licence.en" ("Licence.ru" in russian
  *              translation) distributed in the BIEW archive.
@@ -22,11 +22,11 @@
 /*
     Copyright (C) 1999-2002 Konstantin Boldyshev <konst@linuxassembly.org>
 
-    $Id: vio.c,v 1.17 2009/01/31 11:08:22 nickols_k Exp $
+    $Id: vio.c,v 1.18 2009/09/03 16:57:40 nickols_k Exp $
 */
 
 #ifndef lint
-static const char rcs_id[] = "$Id: vio.c,v 1.17 2009/01/31 11:08:22 nickols_k Exp $";
+static const char rcs_id[] = "$Id: vio.c,v 1.18 2009/09/03 16:57:40 nickols_k Exp $";
 #endif
 
 #define _XOPEN_SOURCE 500

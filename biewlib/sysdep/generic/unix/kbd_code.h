@@ -4,7 +4,7 @@
  * @brief       This file contains definitions of keyboard codes
  * @version     -
  * @remark      this source file is part of Binary vIEW project (BIEW).
- *              The Binary vIEW (BIEW) is copyright (C) 1995 Nick Kurshev.
+ *              The Binary vIEW (BIEW) is copyright (C) 1995 Nickols_K.
  *              All rights reserved. This software is redistributable under the
  *              licence given in the file "Licence.en" ("Licence.ru" in russian
  *              translation) distributed in the BIEW archive.
@@ -18,7 +18,7 @@
 /*
     Copyright (C) 1999-2001 Konstantin Boldyshev <konst@linuxassembly.org>
 
-    $Id: kbd_code.h,v 1.2 2001/12/16 22:51:05 konst Exp $
+    $Id: kbd_code.h,v 1.3 2009/09/03 16:57:40 nickols_k Exp $
 */
 
 #ifndef __KBD_CODE_H
