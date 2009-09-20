@@ -18,11 +18,11 @@
 /*
     Copyright (C) 1999-2002 Konstantin Boldyshev <konst@linuxassembly.org>
 
-    $Id: vio.c,v 1.13 2009/09/03 16:57:40 nickols_k Exp $
+    $Id: vio.c,v 1.14 2009/09/20 13:43:37 nickols_k Exp $
 */
 
 #ifndef lint
-static const char rcs_id[] = "$Id: vio.c,v 1.13 2009/09/03 16:57:40 nickols_k Exp $";
+static const char rcs_id[] = "$Id: vio.c,v 1.14 2009/09/20 13:43:37 nickols_k Exp $";
 #endif
 
 #include <stdlib.h>
@@ -186,6 +186,12 @@ chtype __FASTCALL__ _2ps(unsigned char c)
 
 #endif	/* _CURSES_ */
 
+#ifdef HAVE_ICONV
+static char *screen_cp;
+static unsigned is_unicode=0;
+static void *nls_handle;
+#endif
+
 #ifdef	_VT100_
 
 #include <errno.h>
@@ -206,10 +212,6 @@ chtype __FASTCALL__ _2ps(unsigned char c)
 static char *vtmp;
 static int out_fd;
 static int _color[8] = {0,4,2,6,1,5,3,7};
-static char *screen_cp;
-static unsigned is_unicode=0;
-
-static void *nls_handle;
 
 static unsigned char frames_vt100[0x30] =
 "aaaxuuukkuxkjjjkmvwtqnttmlvwtqnvvwwmmllnnjlaaaaa";
