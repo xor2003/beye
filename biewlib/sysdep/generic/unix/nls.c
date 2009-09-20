@@ -23,11 +23,11 @@
 /*
     Copyright (C) 1999-2001 Konstantin Boldyshev <konst@linuxassembly.org>
 
-    $Id: nls.c,v 1.10 2009/09/03 16:57:40 nickols_k Exp $
+    $Id: nls.c,v 1.11 2009/09/20 14:37:19 nickols_k Exp $
 */
 
 #ifndef lint
-static const char copyright[] = "$Id: nls.c,v 1.10 2009/09/03 16:57:40 nickols_k Exp $";
+static const char copyright[] = "$Id: nls.c,v 1.11 2009/09/20 14:37:19 nickols_k Exp $";
 #endif
 #include <errno.h>
 #include <stdlib.h>
@@ -153,6 +153,7 @@ char *nls_get_screen_cp(void)
 void* nls_init(const char *to_cp,const char *src_cp) {
 #ifdef HAVE_ICONV
     iconv_t ic;
+    errno=0;
     ic=iconv_open(to_cp,src_cp);
     if(errno) {
 	printm("ICONV(%s,%s): Open with error: %s\n",to_cp,src_cp,strerror(errno));
