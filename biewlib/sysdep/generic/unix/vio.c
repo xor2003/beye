@@ -18,11 +18,11 @@
 /*
     Copyright (C) 1999-2002 Konstantin Boldyshev <konst@linuxassembly.org>
 
-    $Id: vio.c,v 1.15 2009/09/20 14:37:19 nickols_k Exp $
+    $Id: vio.c,v 1.16 2009/09/20 14:39:37 nickols_k Exp $
 */
 
 #ifndef lint
-static const char rcs_id[] = "$Id: vio.c,v 1.15 2009/09/20 14:37:19 nickols_k Exp $";
+static const char rcs_id[] = "$Id: vio.c,v 1.16 2009/09/20 14:39:37 nickols_k Exp $";
 #endif
 
 #include <stdlib.h>
@@ -328,9 +328,9 @@ void __FASTCALL__ __vioReadBuff(tAbsCoord x, tAbsCoord y, tvioBuff *buff, unsign
     memcpy(buff->oem_pg, addr + (violen << 1), len);
 }
 
-    unsigned i;
 void __FASTCALL__ __vioWriteBuff(tAbsCoord x, tAbsCoord y, const tvioBuff *buff, unsigned len)
 {
+    unsigned i;
     unsigned char c;
     unsigned char *addr;
     tAbsCoord xx, yy;
