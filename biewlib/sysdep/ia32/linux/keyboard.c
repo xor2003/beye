@@ -18,11 +18,11 @@
 /*
     Copyright (C) 1999-2001 Konstantin Boldyshev <konst@linuxassembly.org>
 
-    $Id: keyboard.c,v 1.13 2009/09/03 16:57:41 nickols_k Exp $
+    $Id: keyboard.c,v 1.14 2009/09/24 09:12:13 nickols_k Exp $
 */
 
 #ifndef lint
-static const char rcs_id[] = "$Id: keyboard.c,v 1.13 2009/09/03 16:57:41 nickols_k Exp $";
+static const char rcs_id[] = "$Id: keyboard.c,v 1.14 2009/09/24 09:12:13 nickols_k Exp $";
 #endif
 
 #include <errno.h>
@@ -293,7 +293,7 @@ static void __FASTCALL__ console_leave(void)
     ioctl(in_fd, TCSETSW, &sattr);
     ioctl(in_fd, KDSKBMODE, K_XLATE);
     ioctl(in_fd, VT_RELDISP, VT_ACKACQ);
-    signal(SIGUSR1, (void *)(int) console_leave);
+    signal(SIGUSR1, (void *) console_leave);
 }
 
 static void __FASTCALL__ console_enter(void)
@@ -302,7 +302,7 @@ static void __FASTCALL__ console_enter(void)
     ioctl(in_fd, TCSETSW, &tattr);
     memset(&keypressed, 0, KEYNUM * sizeof(int));
     console_restart = 1;
-    signal(SIGUSR2, (void *)(int) console_enter);
+    signal(SIGUSR2, (void *) console_enter);
 }
 
 /**
@@ -623,8 +623,8 @@ void __FASTCALL__ __init_keyboard(const char *user_cp)
     if (on_console) {	/* init vt switching */
 	struct vt_mode vt;
 
-	signal(SIGUSR1, (void *)(int) console_leave);
-	signal(SIGUSR2, (void *)(int) console_enter);
+	signal(SIGUSR1, (void *) console_leave);
+	signal(SIGUSR2, (void *) console_enter);
 	ioctl(in_fd, VT_GETMODE, &vt);
 	vt.mode = VT_PROCESS;
 	vt.relsig = SIGUSR1;
@@ -646,7 +646,7 @@ void __FASTCALL__ __init_keyboard(const char *user_cp)
 
     keybuf.current = 0;
 
-    signal(SIGIO, (void *)(int) ReadNextEvent);
+    signal(SIGIO, (void *) ReadNextEvent);
 }
 
 void __FASTCALL__ __term_keyboard(void)
