@@ -351,6 +351,11 @@ repnz lodsd
 rep stosb
 repe cmpsb
 repz movsb
+es stosb
+ss stosw
+fs stosd
+gs movsb
+cs movsw
 
 push si
 push esi
