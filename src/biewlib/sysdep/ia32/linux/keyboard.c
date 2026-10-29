@@ -490,6 +490,25 @@ void __FASTCALL__ ReadNextEvent(void)
 			}
 			continue;
 		    }
+		    if (ch == '\x1b')
+		    {
+			/* ESC-prefix Alt (Konsole "Meta" mode): the following
+			   sequence encodes the real key, so merge it.  A lone
+			   ESC stays a lone ESC. */
+			int nxt = getch();
+			if (nxt == ERR) key = KE_ESCAPE;
+			else
+			{
+			    key = map_curses_key(nxt);
+			    if (key)
+			    {
+				key |= ADD_ALT;
+				if(rawkb_mode) { rawkb_buf[0]=(unsigned char)nxt; rawkb_len=1; }
+			    }
+			    else { ungetch(nxt); key = KE_ESCAPE; }
+			}
+			goto place_key;
+		    }
 		    key = map_curses_key(ch);
 		    if (!key) continue;
 		    if(rawkb_mode) { rawkb_buf[0]=(unsigned char)ch; rawkb_len=1; }
