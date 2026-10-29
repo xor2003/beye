@@ -110,6 +110,7 @@ static void __NEAR__ __FASTCALL__ drawTitle( void )
 char legalchars[] = "+-0123456789ABCDEFabcdef";
 
 extern tBool iniUseHiewKeys;
+extern unsigned biewSearchFlg;
 
 static void __NEAR__ __FASTCALL__ doMiscKey( void )
 {
@@ -119,6 +120,22 @@ static void __NEAR__ __FASTCALL__ doMiscKey( void )
   PaintTitle();
   drawPrompt();
   BMSeek(sfp,BM_SEEK_SET);
+}
+
+static void __NEAR__ __FASTCALL__ doReRead( void )
+{
+  BMReRead();
+  FoundTextSt = FoundTextEnd;
+  PaintTitle();
+}
+
+static __filesize_t __NEAR__ __FASTCALL__ navFormatActions(__filesize_t nfp)
+{
+  int i;
+  i = SelBoxA(detectedFormat->prompt,10," Select format action: ",0);
+  if(i != -1 && detectedFormat->action[i])
+     nfp = detectedFormat->action[i]();
+  return nfp;
 }
 
 void MainLoop( void )
@@ -164,6 +181,19 @@ void MainLoop( void )
                     {
                        unsigned i;
                        i = (ch - KE_CTL_F(1)) >> 8;
+                       if(iniUseHiewKeys)
+                       {
+                          if(i == 3) { doReRead(); ch = KE_SUPERKEY; break; }      /* Ctrl-F4 reread */
+                          if(i == 8 || i == 9)                                     /* Ctrl-F9/F10: file list/state */
+                          {
+                             if(FileUtils())
+                             {
+                                FoundTextSt = FoundTextEnd; ch = KE_SUPERKEY;
+                                PaintTitle();
+                             }
+                             break;
+                          }
+                       }
                        if(activeMode->action[i])
                        {
                          if(activeMode->action[i]()) { ch = KE_SUPERKEY; drawPrompt(); }
@@ -183,6 +213,20 @@ void MainLoop( void )
                       {
                         unsigned i;
                         i = (ch - KE_ALT_F(1)) >> 8;
+                        if(iniUseHiewKeys)
+                        {
+                           if(i == 3) { doReRead(); ch = KE_SUPERKEY; break; }   /* Alt-F4 reload */
+                           if(i == 6) { biewSearchFlg ^= SF_REVERSE; break; }    /* Alt-F7 direction */
+                           if(i == 9)                                             /* Alt-F10 leave file */
+                           {
+                              if(FileUtils())
+                              {
+                                 FoundTextSt = FoundTextEnd; ch = KE_SUPERKEY;
+                                 PaintTitle();
+                              }
+                              break;
+                           }
+                        }
                         if(detectedFormat->action[i]) nfp = detectedFormat->action[i]();
                       }
                       break;
@@ -282,10 +326,19 @@ void MainLoop( void )
     case KE_SHIFT_F(6): SelectSysInfo(); break;
     case KE_F(7): nfp = Search(False); ch = KE_JUSTFIND; break;
     case KE_SHIFT_F(7) : nfp = Search(True); ch = KE_JUSTFIND; break;
-    case KE_F(8):  if(detectedFormat->showHdr) nfp = detectedFormat->showHdr();
+    case KE_F(12):    if(iniUseHiewKeys && activeMode->action[9])
+                         { if(activeMode->action[9]()) { ch = KE_SUPERKEY; drawPrompt(); } }
+                      break;
+    case KE_F(8):  if(iniUseHiewKeys && (activeMode->flags & __MF_TEXT)
+                                    && activeMode->action[1])
+                   {
+                      if(activeMode->action[1]()) { ch = KE_SUPERKEY; drawPrompt(); }
+                   }
+                   else if(detectedFormat->showHdr) nfp = detectedFormat->showHdr();
                    else if(IsNewExe()) nfp = mzTable.showHdr();
                    break;
-    case KE_SHIFT_F(8): SelectTool(); break;
+    case KE_SHIFT_F(8): if(iniUseHiewKeys) { nfp = navFormatActions(nfp); break; }
+                        SelectTool(); break;
     case KE_F(9): if(iniUseHiewKeys)
                   {
                      if(FileUtils())

@@ -131,7 +131,10 @@ static void __NEAR__ fillFxText( void )
     FxText[2] = (activeMode->flags & __MF_TEXT) ? "More  " : misckey;
     FxText[3] = "Mode  ";                     /* Hiew F4 = mode select */
     FxText[8] = "Files ";                     /* Hiew F9 = file browser */
+    if((activeMode->flags & __MF_TEXT) && activeMode->action[1])
+      FxText[7] = "Xlat  ";                   /* Hiew text F8 = xlat table */
     ShiftFxText[0] = "About ";
+    ShiftFxText[7] = "NavFmt";
     ShiftFxText[8] = "Setup ";
   }
   else
@@ -142,6 +145,7 @@ static void __NEAR__ fillFxText( void )
     FxText[3] = misckey;
     FxText[8] = "Setup ";
     ShiftFxText[0] = "ModHlp";
+    ShiftFxText[7] = "Tools ";
     ShiftFxText[8] = "      ";
   }
 }
