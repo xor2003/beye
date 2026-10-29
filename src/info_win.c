@@ -119,9 +119,13 @@ static const char * FxText[] =
   "Quit  "
 };
 
+static const char *modePrompt[10];
+static const char *fmtPrompt[10];
+
 static void __NEAR__ fillFxText( void )
 {
   extern tBool iniUseHiewKeys;
+  unsigned i;
   const char *misckey = activeMode->misckey_name ? activeMode->misckey_name() : NULL;
   FxText[7] = detectedFormat->showHdr || IsNewExe() ? "Header" : NULL;
   if(iniUseHiewKeys)
@@ -134,8 +138,21 @@ static void __NEAR__ fillFxText( void )
     if((activeMode->flags & __MF_TEXT) && activeMode->action[1])
       FxText[7] = "Xlat  ";                   /* Hiew text F8 = xlat table */
     ShiftFxText[0] = "About ";
+    ShiftFxText[1] = "      ";
     ShiftFxText[7] = "NavFmt";
     ShiftFxText[8] = "Setup ";
+    /* keep Ctrl/Alt legends in sync with the hiew-mode remaps */
+    for(i = 0; i < 10; i++)
+    {
+      modePrompt[i] = activeMode->prompt[i];
+      fmtPrompt[i] = detectedFormat->prompt[i];
+    }
+    modePrompt[3] = "ReRead";                 /* Ctrl-F4 */
+    modePrompt[8] = "Files ";                 /* Ctrl-F9 */
+    modePrompt[9] = "State ";                 /* Ctrl-F10 */
+    fmtPrompt[3] = "Reload";                  /* Alt-F4 */
+    fmtPrompt[6] = "Dir   ";                  /* Alt-F7 */
+    fmtPrompt[9] = "Leave ";                  /* Alt-F10 */
   }
   else
   {
@@ -145,15 +162,21 @@ static void __NEAR__ fillFxText( void )
     FxText[3] = misckey;
     FxText[8] = "Setup ";
     ShiftFxText[0] = "ModHlp";
+    ShiftFxText[1] = "      ";
     ShiftFxText[7] = "Tools ";
     ShiftFxText[8] = "      ";
+    for(i = 0; i < 10; i++)
+    {
+      modePrompt[i] = activeMode->prompt[i];
+      fmtPrompt[i] = detectedFormat->prompt[i];
+    }
   }
 }
 
 void drawPrompt( void )
 {
   fillFxText();
-  __drawMultiPrompt(FxText, ShiftFxText, detectedFormat->prompt, activeMode->prompt);
+  __drawMultiPrompt(FxText, ShiftFxText, fmtPrompt, modePrompt);
 }
 
 static const char * amenu_names[] =

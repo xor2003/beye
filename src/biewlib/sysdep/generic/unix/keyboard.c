@@ -161,8 +161,8 @@ seq4 = {
 seq5 = {
     {'0',KE_F(9)},
     {'1',KE_F(10)},
-    {'3',KE_SHIFT_F(1)},
-    {'4',KE_SHIFT_F(2)},
+    {'3',KE_F(11)},
+    {'4',KE_F(12)},
     {'5',KE_SHIFT_F(3)},
     {'6',KE_SHIFT_F(4)},
     {'8',KE_SHIFT_F(5)},
@@ -455,6 +455,72 @@ void __FASTCALL__ ReadNextEvent(void)
 /*
     translate escape sequence
 */
+
+    /*
+       xterm/modern terminal modifier form: ESC [ <num> ; <mod> <final>
+       where mod: 2=Shift 3=Alt 4=Shift+Alt 5=Ctrl 6=Shift+Ctrl
+                  7=Alt+Ctrl 8=Shift+Alt+Ctrl
+    */
+    if (!key && c[1] == '[')
+    {
+	int j;
+	for (j = 2; j < i && c[j] != ';'; j++) ;
+	if (j < i && j + 2 < i)
+	{
+	    int num = 0, mod;
+	    int k;
+	    for (k = 2; k < j; k++)
+		if (c[k] >= '0' && c[k] <= '9') num = num * 10 + (c[k] - '0');
+	    mod = c[j + 1] - '0';
+	    if (mod >= 1 && mod <= 8)
+	    {
+		int base = 0;
+		switch (c[i - 1])
+		{
+		    case '~':
+			switch (num)
+			{
+			    case 11: base = KE_F(1); break;
+			    case 12: base = KE_F(2); break;
+			    case 13: base = KE_F(3); break;
+			    case 14: base = KE_F(4); break;
+			    case 15: base = KE_F(5); break;
+			    case 17: base = KE_F(6); break;
+			    case 18: base = KE_F(7); break;
+			    case 19: base = KE_F(8); break;
+			    case 20: base = KE_F(9); break;
+			    case 21: base = KE_F(10); break;
+			    case 23: base = KE_F(11); break;
+			    case 24: base = KE_F(12); break;
+			    case 2:  base = KE_INS; break;
+			    case 3:  base = KE_DEL; break;
+			    case 5:  base = KE_PGUP; break;
+			    case 6:  base = KE_PGDN; break;
+			    case 7:  base = KE_HOME; break;
+			    case 8:  base = KE_END; break;
+			}
+			break;
+		    case 'P': base = (num == 1) ? KE_F(1) : 0; break;
+		    case 'Q': base = (num == 1) ? KE_F(2) : 0; break;
+		    case 'R': base = (num == 1) ? KE_F(3) : 0; break;
+		    case 'S': base = (num == 1) ? KE_F(4) : 0; break;
+		    case 'A': base = (num == 1) ? KE_UPARROW : 0; break;
+		    case 'B': base = (num == 1) ? KE_DOWNARROW : 0; break;
+		    case 'C': base = (num == 1) ? KE_RIGHTARROW : 0; break;
+		    case 'D': base = (num == 1) ? KE_LEFTARROW : 0; break;
+		    case 'H': base = (num == 1) ? KE_HOME : 0; break;
+		    case 'F': base = (num == 1) ? KE_END : 0; break;
+		}
+		if (base)
+		{
+		    key = base;
+		    if (mod & 1) key |= ADD_SHIFT;
+		    if (mod & 2) key |= ADD_ALT;
+		    if (mod & 4) key |= ADD_CONTROL;
+		}
+	    }
+	}
+    }
 
 #define S S[i]
     for (i = 0; i < SEQ_NUM && !key; i++) {
