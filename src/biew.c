@@ -67,7 +67,7 @@ tBool iniSettingsAnywhere = False;
 tBool fioUseMMF = False;
 tBool iniPreserveTime = False;
 tBool iniUseExtProgs = True;
-tBool iniUseHiewKeys = False;
+tBool iniUseHiewKeys = True;
 __filesize_t headshift = 0L;
 char *ini_name;
 
@@ -483,8 +483,8 @@ static hIniProfile * __NEAR__ __FASTCALL__ load_ini_info( void )
   biewReadProfileString(ini,"Biew","Setup","UseExternalProgs","yes",tmp,sizeof(tmp));
   if(stricmp(tmp,"yes") == 0) iniUseExtProgs = True;
   biewReadProfileString(ini,"Biew","Setup","Codepage","CP866",biew_codepage,sizeof(biew_codepage));
-  biewReadProfileString(ini,"Biew","Setup","HiewKeys","no",tmp,sizeof(tmp));
-  if(stricmp(tmp,"yes") == 0) iniUseHiewKeys = True;
+  biewReadProfileString(ini,"Biew","Setup","HiewKeys","yes",tmp,sizeof(tmp));
+  if(stricmp(tmp,"no") == 0) iniUseHiewKeys = False;
   return ini;
 }
 
