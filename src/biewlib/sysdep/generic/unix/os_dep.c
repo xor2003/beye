@@ -32,6 +32,7 @@ static const char rcs_id[] = "$Id: os_dep.c,v 1.10 2009/09/03 16:57:40 nickols_k
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <signal.h>
 #include <time.h>
 #include <unistd.h>
@@ -168,11 +169,25 @@ void __FASTCALL__ __init_sys(void)
 	for (i = 0; termtab[i].name != NULL && strcasecmp(t, termtab[i].name); i++);
     terminal = &termtab[i];
 
+#ifdef HAVE_NOTCURSES
+    if (terminal->type == TERM_UNKNOWN)
+	terminal = &termtab[2]; /* xterm: notcurses queries the terminal itself */
+#else
+    if (terminal->type == TERM_UNKNOWN) {
+	if (t != NULL && (!strncasecmp(t, "xterm", 5) || !strncasecmp(t, "screen", 6) ||
+	    !strncasecmp(t, "tmux", 4) || !strncasecmp(t, "rxvt", 4) ||
+	    !strncasecmp(t, "konsole", 7) || !strncasecmp(t, "alacritty", 8) ||
+	    !strncasecmp(t, "kitty", 5) || !strncasecmp(t, "wezterm", 7) ||
+	    !strncasecmp(t, "foot", 4) || !strncasecmp(t, "gnome", 5) ||
+	    !strncasecmp(t, "st", 2) || !strncasecmp(t, "vte", 3)))
+	    terminal = &termtab[2]; /* xterm */
+    }
 #ifdef _VT100_
     if (terminal->type == TERM_UNKNOWN) {
         printm("Sorry, I can't handle terminal type '%s'.\nIf you are sure it is vt100 compatible, try setting TERM to vt100:\n\n$ TERM=vt100 biew filename\n\nIf you will not succeed, use slang/curses version of BIEW.\n\n", t);
         exit(2);
     }
+#endif
 #endif
 	
     if (i == 5) output_7 = 1;	/* beterm is (B)roken (E)vil (TERM)inal */
