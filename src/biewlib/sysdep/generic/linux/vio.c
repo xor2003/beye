@@ -108,6 +108,15 @@ static const char *nc_ps437[0x30] = {
     "\xe2\x96\x84","\xe2\x96\x8c","\xe2\x96\x90","\xe2\x96\x80"
 };
 
+/* VGA palette (DOS attrs -> real colors). Palette indices are unusable:
+   on terminfos without setaf>7 entries notcurses emits invalid SGR codes. */
+static const struct { unsigned char r, g, b; } nc_vga[16] = {
+    {0x00,0x00,0x00},{0xaa,0x00,0x00},{0x00,0xaa,0x00},{0xaa,0x55,0x00},
+    {0x00,0x00,0xaa},{0xaa,0x00,0xaa},{0x00,0xaa,0xaa},{0xaa,0xaa,0xaa},
+    {0x55,0x55,0x55},{0x55,0x55,0xff},{0x55,0xff,0x55},{0x55,0xff,0xff},
+    {0xff,0x55,0x55},{0xff,0x55,0xff},{0xff,0xff,0x55},{0xff,0xff,0xff}
+};
+
 #endif
 
 
@@ -294,9 +303,9 @@ void __FASTCALL__ __vioWriteBuff(tAbsCoord x, tAbsCoord y, const tvioBuff *buff,
 		    }
 		}
 	    } else if (c) egc = ".";
-	    ncplane_set_fg_palindex(nc_stdp, fg);
-	    if (nc_is_transp(_bg(ca))) ncplane_set_bg_palindex(nc_stdp, 0);
-	    else ncplane_set_bg_palindex(nc_stdp, bg);
+	    ncplane_set_fg_rgb8(nc_stdp, nc_vga[fg].r, nc_vga[fg].g, nc_vga[fg].b);
+	    if (nc_is_transp(_bg(ca))) ncplane_set_bg_default(nc_stdp);
+	    else ncplane_set_bg_rgb8(nc_stdp, nc_vga[bg].r, nc_vga[bg].g, nc_vga[bg].b);
 	    ncplane_putegc_yx(nc_stdp, cy, cx, egc, NULL);
 	}
 	notcurses_render(biew_nc);
