@@ -101,8 +101,8 @@
 
 #endif	/* __GLIBC__ */
 
-#define tUntPtr		int_ptr_t
-#define tUIntPtr	uint_ptr_t
+#define tUntPtr		intptr_t
+#define tUIntPtr	uintptr_t
 
 #define tIntMax		intmax_t
 #define tUIntMax	uintmax_t

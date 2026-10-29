@@ -328,7 +328,7 @@ static __filesize_t __FASTCALL__ lmf_pa2va(__filesize_t pa)
 static tBool __FASTCALL__ lmf_ReadSecHdr(BGLOBAL handle,memArray *obj,unsigned nnames)
 {
 	unsigned i;
-	char tmp[30];
+	char tmp[48];
 	char stmp[80];
 	UNUSED(handle);
 	UNUSED(nnames);
@@ -340,17 +340,17 @@ static tBool __FASTCALL__ lmf_ReadSecHdr(BGLOBAL handle,memArray *obj,unsigned n
 			sprintf(tmp,"%s %s",
 				(DEF.cflags&_PCF_32BIT)?"32-bit":"16-bit",
 				(DEF.cflags&_PCF_FLAT)?"flat model":"");
-			sprintf(stmp," %2d %-17s<%2d> %s",i+1,
+			sprintf(stmp," %2d %-17.17s<%2d> %.15s",i+1,
 				lmftypes[hl[i].header.rec_type],seg_num,tmp);
 			break;
 		case _LMF_DATA_REC:
 		case _LMF_FIXUP_SEG_REC:
 		case _LMF_FIXUP_LINEAR_REC:
-			sprintf(tmp,"%s (%s)",lmftypes[hl[i].header.rec_type],
+			sprintf(tmp,"%.20s (%s)",lmftypes[hl[i].header.rec_type],
 				((xdef.seg[hl[i].data.index]>>28)==_LMF_CODE)?
 					"code":"data");
 			if(DEF.cflags&_PCF_32BIT)
-				sprintf(stmp," %2d %-18s %2d %08lX to %08lX",
+				sprintf(stmp," %2d %-18.18s %2d %08lX to %08lX",
 					i+1,
 					tmp,
 					hl[i].data.index,
@@ -358,7 +358,7 @@ static tBool __FASTCALL__ lmf_ReadSecHdr(BGLOBAL handle,memArray *obj,unsigned n
 					(unsigned long)hl[i].data.offset+
 						hl[i].header.data_nbytes-HDRSIZE-DATSIZE);
 			else
-				sprintf(stmp," %2d %-18s %2d %04lX to %04lX        ",
+				sprintf(stmp," %2d %-18.18s %2d %04lX to %04lX        ",
 					i+1,
 					tmp,
 					hl[i].data.index,
@@ -367,13 +367,13 @@ static tBool __FASTCALL__ lmf_ReadSecHdr(BGLOBAL handle,memArray *obj,unsigned n
 						hl[i].header.data_nbytes-HDRSIZE-DATSIZE);
 			break;
 		case _LMF_RESOURCE_REC:
-			sprintf(tmp,"%s%s",lmftypes[hl[i].header.rec_type],
+			sprintf(tmp,"%.20s%s",lmftypes[hl[i].header.rec_type],
 				(hl[i].res.resource_type==0)?"(usage)":"");
-			sprintf(stmp," %2d %-18s",
+			sprintf(stmp," %2d %-18.18s",
 				i+1,tmp);
 			break;
 		default:
-			sprintf(stmp," %2d %-18s",i+1,
+			sprintf(stmp," %2d %-18.18s",i+1,
 				(hl[i].header.rec_type<10)?
 					lmftypes[hl[i].header.rec_type]:lmftypes[10]);
 		}
@@ -407,7 +407,7 @@ static __filesize_t __FASTCALL__ lmf_ShowHeader( void )
 	__filesize_t fpos;
 	TWindow *w;
 	char hdr[81];
-	char tmp[30];
+	char tmp[64];
 	unsigned keycode;
 /*	unsigned long entrya;*/
 	fpos = BMGetCurrFilePos();

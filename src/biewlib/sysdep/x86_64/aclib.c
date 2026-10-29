@@ -81,7 +81,7 @@ static void GetCpuCaps( void )
 		do_cpuid(0x80000001, regs2);
 		if((regs2[3] & (1 << 23 )) >> 23) __mmx_caps |= USE_MMX;
 		if((regs2[3] & (1 << 22 )) >> 22) __mmx_caps |= USE_MMX2;
-		if((regs2[3] & (1 << 31 )) >> 31) __mmx_caps |= USE_3DNOW;
+		if((regs2[3] & (1U << 31 )) >> 31) __mmx_caps |= USE_3DNOW;
 		if((regs2[3] & (1 << 30 )) >> 30) __mmx_caps |= USE_3DNOW2;
 	}
 }

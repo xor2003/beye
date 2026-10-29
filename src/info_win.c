@@ -121,8 +121,29 @@ static const char * FxText[] =
 
 static void __NEAR__ fillFxText( void )
 {
-  FxText[3] = activeMode->misckey_name ? activeMode->misckey_name() : NULL;
+  extern tBool iniUseHiewKeys;
+  const char *misckey = activeMode->misckey_name ? activeMode->misckey_name() : NULL;
   FxText[7] = detectedFormat->showHdr || IsNewExe() ? "Header" : NULL;
+  if(iniUseHiewKeys)
+  {
+    FxText[0] = "Help  ";                     /* Hiew F1 = help */
+    FxText[1] = (activeMode->flags & __MF_TEXT) ? misckey : NULL;
+    FxText[2] = (activeMode->flags & __MF_TEXT) ? "More  " : misckey;
+    FxText[3] = "Mode  ";                     /* Hiew F4 = mode select */
+    FxText[8] = "Files ";                     /* Hiew F9 = file browser */
+    ShiftFxText[0] = "About ";
+    ShiftFxText[8] = "Setup ";
+  }
+  else
+  {
+    FxText[0] = "Intro ";
+    FxText[1] = "ViMode";
+    FxText[2] = "More  ";
+    FxText[3] = misckey;
+    FxText[8] = "Setup ";
+    ShiftFxText[0] = "ModHlp";
+    ShiftFxText[8] = "      ";
+  }
 }
 
 void drawPrompt( void )

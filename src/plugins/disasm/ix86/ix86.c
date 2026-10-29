@@ -327,10 +327,10 @@ const ix86_Opcodes ix86_table[256] =
 
 #ifdef IX86_64
 #define DECLARE_EX_INSN(n32, n64, func, func64, flags, flags64)\
-{ n32, n64, func, func64, flags64, flags }
+{ (const char *)n32, (const char *)n64, func, func64, flags64, flags }
 #else
 #define DECLARE_EX_INSN(n32, n64, func, func64, flags, flags64)\
-{ n32, func, flags }
+{ (const char *)n32, func, flags }
 #endif
 
 const ix86_ExOpcodes ix86_0F38_Table[256] =
@@ -1909,10 +1909,10 @@ const ix86_3dNowopcodes ix86_3dNowtable[256] =
 
 #ifdef IX86_64
 #define DECLARE_EX_INSN(n32, n64, func, func64, flags, flags64)\
-{ n32, n64, func, func64, flags64, flags }
+{ (const char *)n32, (const char *)n64, func, func64, flags64, flags }
 #else
 #define DECLARE_EX_INSN(n32, n64, func, func64, flags, flags64)\
-{ n32, func, flags }
+{ (const char *)n32, func, flags }
 #endif
 
 /*
@@ -5760,7 +5760,7 @@ tmperror:
   goto doneerror;
 
 noassemblererror:
-  result.insn="No assembler available/usable or disabled external programs";
+  result.insn="No assembler available/usable";
   result.err_code=4;
   goto doneerror;
 

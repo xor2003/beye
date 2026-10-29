@@ -549,6 +549,16 @@ case "$build_arch" in
     ;;
 esac
 
+# Route archs/hosts without a sysdep port to the portable generic code
+if test ! -d "biewlib/sysdep/$build_arch" || \
+   test ! -d "biewlib/sysdep/$build_arch/$_target_system" ; then
+    echo "No sysdep port for $build_arch/$_target_system, using generic code"
+    build_arch=generic
+    if test ! -d "biewlib/sysdep/generic/$_target_system" ; then
+        _target_system=unix
+    fi
+fi
+
 if test -z "$_x11incdir" ; then
 echocheck "X11 headers"
   for I in /usr/include /usr/X11R6/include /usr/X11/include /usr/openwin/include ; do
@@ -565,8 +575,8 @@ fi
 
 if test -z "$_x11libdir" ; then
 echocheck "X11 libs"
-  for I in /usr/X11R6/lib /usr/X11/lib /usr/lib32 /usr/openwin/lib ; do
-    if test -d "$I" ; then
+  for I in /usr/lib64 /usr/X11R6/lib64 /usr/X11R6/lib /usr/X11/lib /usr/lib32 /usr/openwin/lib ; do
+    if test -f "$I/libX11.so" || test -f "$I/libX11.a" ; then
       _x11libdir="-L$I"
       echores "yes (using $I)"
       break;
@@ -686,7 +696,7 @@ echores "$_curses"
 esac
 
 
-echocheck "popen"
+echocheck "checking for popen"
 cat > $TMPC << EOF
 #include <stdio.h>
 int main(void){(void)popen; return 0;}
@@ -696,7 +706,7 @@ cc_check && enable _popen
 enabled _popen && _cdefos="-DHAVE_POPEN=1 $_cdefos"
 echores "$_popen"
 
-echocheck "pclose"
+echocheck "checking for pclose"
 cat > $TMPC << EOF
 #include <stdio.h>
 int main(void){(void)pclose; return 0;}
@@ -706,7 +716,7 @@ cc_check && enable _pclose
 enabled _pclose && _cdefos="-DHAVE_PCLOSE=1 $_cdefos"
 echores "$_pclose"
 
-echocheck "sys/resource.h"
+echocheck "checking for sys/resource.h"
 check_header sys/resource.h
 enabled sys_resource_h && _cdefos="-DHAVE_SYS_RESOURCE=1 $_cdefos"
 echores "$sys_resource_h"

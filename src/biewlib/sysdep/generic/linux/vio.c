@@ -38,6 +38,7 @@ static const char rcs_id[] = "$Id: vio.c,v 1.18 2009/09/03 16:57:40 nickols_k Ex
 #include <stdlib.h>
 #define __USE_BSD
 #include <string.h>
+#include <strings.h>
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/ioctl.h>

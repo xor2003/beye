@@ -595,8 +595,8 @@ static tBool __FASTCALL__  __ReadImpContPE(BGLOBAL handle,memArray * obj,unsigne
     else
     {
       char tmp[80];
-      if(is_64bit) sprintf(tmp,"< By ordinal >   @%llu",Hint & 0x7FFFFFFFFFFFFFFFULL);
-      else         sprintf(tmp,"< By ordinal >   @%lu" ,(tUInt32)(Hint & 0x7FFFFFFFUL));
+      if(is_64bit) sprintf(tmp,"< By ordinal >   @%llu",(unsigned long long)(Hint & 0x7FFFFFFFFFFFFFFFULL));
+      else         sprintf(tmp,"< By ordinal >   @%lu" ,(unsigned long)(Hint & 0x7FFFFFFFUL));
       strcat(stmp,tmp);
     }
     is_eof = bioEOF(handle);
@@ -1013,8 +1013,9 @@ static __filesize_t __NEAR__ __FASTCALL__ BuildReferStrPE(char *str,RELOC_PE __H
        if(cond)
        {
          /* TODO: is really to have ORDINAL > 0x7fffffff ? */
-         char dig[15];
-         sprintf(dig,"@%lu",Hint & 0x7FFFFFFFUL);
+         char dig[21];
+         sprintf(dig,"@%llu",(unsigned long long)(is_64bit ?
+			Hint & 0x7FFFFFFFFFFFFFFFULL : Hint & 0x7FFFFFFFUL));
          strcat(str,dig);
        }
        else

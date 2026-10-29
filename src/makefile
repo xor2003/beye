@@ -19,7 +19,14 @@ HOST_LDFLAGS=
 
 include ./config.mak
 
-CFLAGS = $(CDEFOS) $(CDEFSYS) $(HOST_CFLAGS) -Wno-int-conversion -Wno-implicit-function-declaration -Wno-incompatible-pointer-types
+# Optional sanitizer build:  make SANITIZE=address,undefined
+# Accepted values: anything gcc/clang's -fsanitize= takes.
+ifneq ($(strip $(SANITIZE)),)
+HOST_CFLAGS += -fsanitize=$(SANITIZE) -fno-omit-frame-pointer -g
+HOST_LDFLAGS += -fsanitize=$(SANITIZE)
+endif
+
+CFLAGS = $(CDEFOS) $(CDEFSYS) $(HOST_CFLAGS)
 LDFLAGS = $(OSLDEF) $(HOST_LDFLAGS)
 
 ###########################################################################
@@ -134,6 +141,49 @@ DO_HELP = @ for i in $(HLP_SUBDIRS); do $(MAKE) -C $$i $@ || exit; done
 
 all: $(BIEWLIB) $(TARGET)
 biewlib: $(BIEWLIB)
+
+##########################################################################
+# Static analysis & lint targets                                          #
+#   make cppcheck     - run cppcheck over all built sources               #
+#   make compiledb    - generate compile_commands.json for clang tools    #
+#   make clang-check  - run clang static analyzer over all built sources  #
+#   make lint         - cppcheck + clang-check                            #
+##########################################################################
+LINT_SRCS = $(OBJS:.o=.c) $(BIEWLIB_OBJS:.o=.c)
+CPPCHECK_FLAGS = --std=c99 --force --quiet --inline-suppr \
+	--enable=warning,performance,portability --template=gcc \
+	--suppressions-list=.cppcheck-suppressions \
+	$(filter -D% -I% -U%,$(CDEFOS) $(CDEFSYS)) -I.
+CLANG_CHECK ?= clang-check
+CPPCHECK ?= cppcheck
+
+compiledb:
+	@{ \
+	  echo '['; \
+	  sep=''; \
+	  for f in $(LINT_SRCS); do \
+	    jcmd=$$(printf '%s' "$(CC) $(CFLAGS) $(INCS) -c $$f -o $$f.o" | \
+	      sed -e 's/\\/\\\\/g' -e 's/"/\\"/g'); \
+	    printf '%s\n  {"directory":"%s","command":"%s","file":"%s"}' \
+	      "$$sep" "$(CURDIR)" "$$jcmd" "$$f"; \
+	    sep=','; \
+	  done; \
+	  echo; echo ']'; \
+	} > compile_commands.json
+	@echo "wrote compile_commands.json ($(words $(LINT_SRCS)) entries)"
+
+cppcheck:
+	$(CPPCHECK) $(CPPCHECK_FLAGS) $(LINT_SRCS)
+
+clang-check: compiledb
+	@for f in $(LINT_SRCS); do \
+	  $(CLANG_CHECK) -analyze -p . $$f 2>&1; \
+	done
+
+lint: cppcheck clang-check
+
+.PHONY: all biewlib clean distclean cleansys cleanlib install uninstall help \
+	compiledb cppcheck clang-check lint
 
 clean:
 	$(DO_HELP)

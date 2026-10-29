@@ -109,6 +109,18 @@ static void __NEAR__ __FASTCALL__ drawTitle( void )
 
 char legalchars[] = "+-0123456789ABCDEFabcdef";
 
+extern tBool iniUseHiewKeys;
+
+static void __NEAR__ __FASTCALL__ doMiscKey( void )
+{
+  __filesize_t sfp;
+  sfp = BMGetCurrFilePos();
+  activeMode->misc_action();
+  PaintTitle();
+  drawPrompt();
+  BMSeek(sfp,BM_SEEK_SET);
+}
+
 void MainLoop( void )
 {
  int ch;
@@ -175,9 +187,11 @@ void MainLoop( void )
                       }
                       break;
     case KE_SUPERKEY: goto DRAW;
-    case KE_F(1) : About();  continue;
+    case KE_F(1) : if(iniUseHiewKeys) { activeMode->help(); break; }
+                  About();  continue;
     default : continue;
-    case KE_SHIFT_F(1): activeMode->help();
+    case KE_SHIFT_F(1): if(iniUseHiewKeys) { About(); break; }
+                  activeMode->help();
                   break;
     case KE_F(10):
     case KE_ESCAPE : return;
@@ -187,9 +201,24 @@ void MainLoop( void )
                   ch = KE_SUPERKEY;
                   break;
     case KE_F(2):
-                  if(SelectMode()) ch = KE_SUPERKEY;
+                  if(iniUseHiewKeys)
+                  {
+                    if((activeMode->flags & __MF_TEXT) && activeMode->misc_action)
+                    {
+                       doMiscKey();
+                       ch = KE_SUPERKEY;
+                    }
+                  }
+                  else if(SelectMode()) ch = KE_SUPERKEY;
                   break;
     case KE_F(3):
+                  if(iniUseHiewKeys && !(activeMode->flags & __MF_TEXT)
+                                   && activeMode->misc_action)
+                  {
+                     doMiscKey();
+                     ch = KE_SUPERKEY;
+                     break;
+                  }
                   if(NewSource())
                   {
                     ch = KE_SUPERKEY;
@@ -198,15 +227,15 @@ void MainLoop( void )
                   }
                   break;
     case KE_F(4):
+                  if(iniUseHiewKeys)
+                  {
+                     if(SelectMode()) ch = KE_SUPERKEY;
+                     break;
+                  }
                   if(activeMode->misc_action)
                   {
-                     __filesize_t sfp;
-                     sfp = BMGetCurrFilePos();
-                     activeMode->misc_action();
+                     doMiscKey();
                      ch = KE_SUPERKEY;
-                     PaintTitle();
-                     drawPrompt();
-                     BMSeek(sfp,BM_SEEK_SET);
                   }
                   break;
     case KE_F(5):
@@ -257,7 +286,17 @@ void MainLoop( void )
                    else if(IsNewExe()) nfp = mzTable.showHdr();
                    break;
     case KE_SHIFT_F(8): SelectTool(); break;
-    case KE_F(9): Setup(); break;
+    case KE_F(9): if(iniUseHiewKeys)
+                  {
+                     if(FileUtils())
+                     {
+                        FoundTextSt = FoundTextEnd; ch = KE_SUPERKEY;
+                        PaintTitle();
+                     }
+                  }
+                  else Setup();
+                  break;
+    case KE_SHIFT_F(9): if(iniUseHiewKeys) Setup(); break;
     case KE_SHIFT_F(10): if(FileUtils())
                    {
                       FoundTextSt = FoundTextEnd; ch = KE_SUPERKEY;

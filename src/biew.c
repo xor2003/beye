@@ -66,7 +66,8 @@ unsigned long biew_kbdFlags = 0L;
 tBool iniSettingsAnywhere = False;
 tBool fioUseMMF = False;
 tBool iniPreserveTime = False;
-tBool iniUseExtProgs = False;
+tBool iniUseExtProgs = True;
+tBool iniUseHiewKeys = False;
 __filesize_t headshift = 0L;
 char *ini_name;
 
@@ -454,7 +455,7 @@ static hIniProfile * __NEAR__ __FASTCALL__ load_ini_info( void )
   biewReadProfileString(ini,"Biew","Search","AsHex","off",tmp,sizeof(tmp));
   if(stricmp(tmp,"on") == 0) biewSearchFlg |= SF_ASHEX;
   biewReadProfileString(ini,"Biew","Browser","LastOpen","",LastOpenFileName,4096);
-  sprintf(buf,"%u",LastMode); /* [dBorca] so that src and dst won't overlap for strncpy */
+  sprintf(buf,"%u",(unsigned)LastMode); /* [dBorca] so that src and dst won't overlap for strncpy */
   biewReadProfileString(ini,"Biew","Browser","LastMode",buf,tmp,sizeof(tmp));
   LastMode = (size_t)strtoul(tmp,NULL,10);
   biewReadProfileString(ini,"Biew","Browser","Offset","0",tmp,sizeof(tmp));
@@ -479,9 +480,11 @@ static hIniProfile * __NEAR__ __FASTCALL__ load_ini_info( void )
   if(!__mmfIsWorkable()) fioUseMMF = False;
   biewReadProfileString(ini,"Biew","Setup","PreserveTimeStamp","no",tmp,sizeof(tmp));
   if(stricmp(tmp,"yes") == 0) iniPreserveTime = True;
-  biewReadProfileString(ini,"Biew","Setup","UseExternalProgs","no",tmp,sizeof(tmp));
+  biewReadProfileString(ini,"Biew","Setup","UseExternalProgs","yes",tmp,sizeof(tmp));
   if(stricmp(tmp,"yes") == 0) iniUseExtProgs = True;
   biewReadProfileString(ini,"Biew","Setup","Codepage","CP866",biew_codepage,sizeof(biew_codepage));
+  biewReadProfileString(ini,"Biew","Setup","HiewKeys","no",tmp,sizeof(tmp));
+  if(stricmp(tmp,"yes") == 0) iniUseHiewKeys = True;
   return ini;
 }
 
@@ -528,6 +531,8 @@ static void __NEAR__ __FASTCALL__ save_ini_info( void )
   strcpy(tmp,iniUseExtProgs ? "yes" : "no");
   biewWriteProfileString(ini,"Biew","Setup","UseExternalProgs",tmp);
   biewWriteProfileString(ini,"Biew","Setup","Codepage",biew_codepage);
+  strcpy(tmp,iniUseHiewKeys ? "yes" : "no");
+  biewWriteProfileString(ini,"Biew","Setup","HiewKeys",tmp);
   if(activeMode->save_ini) activeMode->save_ini(ini);
   udnTerm(ini);
   iniCloseFile(ini);

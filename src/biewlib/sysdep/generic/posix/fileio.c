@@ -31,9 +31,15 @@
 
 #include "biewlib/biewlib.h"
 
+/* On POSIX systems a file descriptor is an int, but bhandle_t is a void *.
+ * Convert explicitly through the pointer-sized integer to keep the code
+ * well-defined on 64-bit targets (and to silence -Wint-conversion). */
+#define FD_OF(h)      ((int)(tUntPtr)(h))
+#define HANDLE_OF(fd) ((bhandle_t)(tUntPtr)(fd))
+
 bhandle_t __FASTCALL__ __OsCreate(const char *name)
 {
-  return open(name,O_RDWR | O_CREAT | O_TRUNC, S_IREAD | S_IWRITE);
+  return HANDLE_OF(open(name,O_RDWR | O_CREAT | O_TRUNC, S_IREAD | S_IWRITE));
 }
 
 int __FASTCALL__ __OsDelete(const char *name)
@@ -48,12 +54,12 @@ int __FASTCALL__ __OsRename(const char *oldname,const char *newname)
 
 void __FASTCALL__ __OsClose(bhandle_t handle)
 {
-  close(handle);
+  close(FD_OF(handle));
 }
 
 bhandle_t __FASTCALL__ __OsDupHandle(bhandle_t handle)
 {
-  return dup(handle);
+  return HANDLE_OF(dup(FD_OF(handle)));
 }
 
 bhandle_t __FASTCALL__ __OsOpen(const char *fname,int mode)
@@ -76,28 +82,28 @@ bhandle_t __FASTCALL__ __OsOpen(const char *fname,int mode)
 /* check for directory (KB) */
 
   if (stat(fname,&st)) return NULL_HANDLE;
-  if (S_ISDIR(st.st_mode)) { errno = EISDIR; return -1; }
-  return open(fname,flags);
+  if (S_ISDIR(st.st_mode)) { errno = EISDIR; return NULL_HANDLE; }
+  return HANDLE_OF(open(fname,flags));
 }
 
 __fileoff_t __FASTCALL__ __OsSeek(bhandle_t handle,__fileoff_t offset,int origin)
 {
-  return lseek(handle,offset,origin);
+  return lseek(FD_OF(handle),offset,origin);
 }
 
 int __FASTCALL__ __OsTruncFile(bhandle_t handle, __filesize_t newsize)
 {
-  return ftruncate(handle,newsize);
+  return ftruncate(FD_OF(handle),newsize);
 }
 
 int __FASTCALL__ __OsRead(bhandle_t handle, void *buff, unsigned count)
 {
-  return read(handle,buff,count);
+  return read(FD_OF(handle),buff,count);
 }
 
 int __FASTCALL__ __OsWrite(bhandle_t handle,const void *buffer, unsigned count)
 {
-  return write(handle,buffer,count);
+  return write(FD_OF(handle),buffer,count);
 }
 
 #define BLKSIZE 32767
@@ -140,7 +146,7 @@ __fileoff_t __FASTCALL__ __FileLength(bhandle_t handle)
   int stat_ret;
   __fileoff_t retval;
   memset(&statbuf,0,sizeof(struct stat));
-  stat_ret = fstat(handle,&statbuf);
+  stat_ret = fstat(FD_OF(handle),&statbuf);
   retval = 0;
   if(stat_ret == 0)
   {
@@ -158,19 +164,19 @@ __fileoff_t __FASTCALL__ __FileLength(bhandle_t handle)
 	while(1)
 	{
 	   off = min + ((max - min) / 2);
-	   if (lseek(handle,off,SEEK_SET) == -1)
+	   if (lseek(FD_OF(handle),off,SEEK_SET) == -1)
 	   	max=off;
 	   else {
-	   if(read(handle,&ch,1) == 1) min = off;
+	   if(read(FD_OF(handle),&ch,1) == 1) min = off;
 	   else                        max = off;
 	   }
 	   if(max - min < 5)
 	   {
 	     retval = min;
-	     lseek(handle,retval,SEEK_SET);
+	     lseek(FD_OF(handle),retval,SEEK_SET);
              for(i=0;i < 5;i++)
 	     {
-	        if(read(handle,&ch,1) == 1) retval++;
+	        if(read(FD_OF(handle),&ch,1) == 1) retval++;
 		else goto loop_end;
 		if(retval > FILEOFF_MAX-2) break;
 	     }

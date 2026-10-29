@@ -27,6 +27,7 @@ static const char rcs_id[] = "$Id: vio.c,v 1.16 2009/09/20 14:39:37 nickols_k Ex
 
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <fcntl.h>
 #include <errno.h>
 

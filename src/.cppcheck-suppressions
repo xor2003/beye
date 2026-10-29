@@ -1,0 +1,7 @@
+// Suppressions for cppcheck on this pre-C99 codebase.
+// extern "C" guards in headers confuse cppcheck's C-mode parser:
+syntaxError:biewlib/sysdep/generic/_inlines.h
+// System headers are intentionally not resolved:
+missingIncludeSystem
+// Legacy K&R style; not a real defect class for this project:
+unusedFunction

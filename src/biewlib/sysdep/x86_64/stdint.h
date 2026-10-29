@@ -100,8 +100,13 @@ typedef unsigned long long int	tUIntFast64;
 
 
 /** Types for `void *' pointers.  */
+#if __WORDSIZE >= 64
+typedef signed long		tUntPtr;
+typedef unsigned long		tUIntPtr;
+#else
 typedef signed int		tUntPtr;
 typedef unsigned int		tUIntPtr;
+#endif
 
 /** Largest integral types.  */
 #ifdef __GNUC__
@@ -116,8 +121,12 @@ typedef unsigned long long int	tUIntMax;
 #if !defined __cplusplus || defined __STDC_LIMIT_MACROS
 
 #ifdef __GNUC__
+#ifndef __INT64_C
 #define __INT64_C(c)	c ## LL
+#endif
+#ifndef __UINT64_C
 #define __UINT64_C(c)	c ## ULL
+#endif
 #endif
 
 /** Limits of integral types.  */

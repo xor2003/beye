@@ -870,7 +870,7 @@ static tBool __FASTCALL__ __elfReadSymTab(BGLOBAL handle,memArray *obj,unsigned 
    sprintf(stmp,"%-29s %016llX %08lX %04hX %s %s %s"
                ,text
                ,(unsigned long long)ELF_XWORD(ELF_SYM(sym,st_value))
-               ,(unsigned)ELF_XWORD(ELF_SYM(sym,st_size))
+               ,(unsigned long)ELF_XWORD(ELF_SYM(sym,st_size))
                ,ELF_HALF(ELF_SYM(sym,st_other))
                ,elf_SymTabType(ELF_SYM(sym,st_info[0]))
                ,elf_SymTabBind(ELF_SYM(sym,st_info[0]))
@@ -879,8 +879,8 @@ static tBool __FASTCALL__ __elfReadSymTab(BGLOBAL handle,memArray *obj,unsigned 
    else
    sprintf(stmp,"%-37s %08lX %08lX %04hX %s %s %s"
                ,text
-               ,(unsigned)ELF_XWORD(ELF_SYM(sym,st_value))
-               ,(unsigned)ELF_XWORD(ELF_SYM(sym,st_size))
+               ,(unsigned long)ELF_XWORD(ELF_SYM(sym,st_value))
+               ,(unsigned long)ELF_XWORD(ELF_SYM(sym,st_size))
                ,ELF_HALF(ELF_SYM(sym,st_other))
                ,elf_SymTabType(ELF_SYM(sym,st_info[0]))
                ,elf_SymTabBind(ELF_SYM(sym,st_info[0]))

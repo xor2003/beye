@@ -67,7 +67,7 @@ mmfHandle          __FASTCALL__ __mmfOpen(const char *fname,int mode)
   struct mmfRecord *mret;
   bhandle_t fhandle;
   fhandle = __OsOpen(fname,mode);
-  if(((int)fhandle) != -1)
+  if(fhandle != NULL_HANDLE)
   {
     mret = PMalloc(sizeof(struct mmfRecord));
     if(mret)
@@ -78,7 +78,7 @@ mmfHandle          __FASTCALL__ __mmfOpen(const char *fname,int mode)
       if(length <= PTRDIFF_MAX)
       {
 	addr = mmap(NULL,length,mk_prot(mode),
-                  mk_flags(mode),(int)fhandle,0L);
+                  mk_flags(mode),(int)(tUntPtr)fhandle,0L);
 	if(addr != (void *)-1)
 	{
 	    mret->fhandle = fhandle;

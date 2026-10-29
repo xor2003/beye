@@ -1692,7 +1692,9 @@ void __FASTCALL__  arg_simd_clmul(char *str,ix86Param *DisP)
 {
    char *a;
    unsigned char suffix;
-   char name[6], realname[10];
+   /* namlen <= 9, precopy <= 7, suffix <= 4 chars:
+      name[] must hold namlen+1, realname[] precopy+4+(namlen-precopy)+1 */
+   char name[16], realname[24];
    unsigned long mode=DisP->mode;
    unsigned namlen,precopy;
    DisP->mode|=MOD_SSE;

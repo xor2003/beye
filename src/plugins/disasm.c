@@ -603,7 +603,7 @@ static int __NEAR__ __FASTCALL__ FullAsmEdit(TWindow * ewnd)
 
                               for (i=aret.insn_len-1; i>=0; i--)
                               {
-                                sprintf(bytebuffer, "%0.2x", aret.insn[i]);
+                                sprintf(bytebuffer, "%02x", (unsigned char)aret.insn[i]);
                                 ungotstring(bytebuffer);
                               }
                            }

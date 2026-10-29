@@ -189,7 +189,7 @@ static tBool __FASTCALL__ udnAddItem( void ) {
     udn item,*prev;
     char ud_name[256],prompt[256];
     off = BMGetCurrFilePos();
-    sprintf(prompt," Name for %08X offset: ",off);
+    sprintf(prompt," Name for %08llX offset: ",(unsigned long long)off);
     prev=NULL;
     ud_name[0]='\0';
     if(udn_list) {
@@ -227,7 +227,7 @@ static tBool    __FASTCALL__ udnReadItems(BGLOBAL handle,memArray * names,unsign
     unsigned i;
     UNUSED(handle);
     for(i=0;i<nnames;i++) {
-	sprintf(stmp,"%-40s %08lX"
+	sprintf(stmp,"%-40.40s %08lX"
 		,((udn *)udn_list->data)[i].name
 		,(unsigned long)((udn *)udn_list->data)[i].offset);
 	if(!ma_AddString(names,stmp,True)) break;
@@ -292,7 +292,7 @@ tBool __FASTCALL__ __udnSaveList( void )
 			,BIEW_VERSION);
 	    for(i=0;i<udn_list->nItems;i++)
 		fprintf(out,"%016llX:%s\n"
-		,((udn *)udn_list->data)[i].offset
+		,(unsigned long long)((udn *)udn_list->data)[i].offset
 		,((udn *)udn_list->data)[i].name);
 	    fclose(out);
 	    udn_modified=False;
@@ -327,7 +327,7 @@ tBool __FASTCALL__  __udnLoadList( void ) {
 	    i = 0;
 	    while(!feof(in)) {
 		buff[0]='\0';
-		fgets(buff,sizeof(buff),in);
+		if(!fgets(buff,sizeof(buff),in)) break;
 		i++;
 		if(buff[0]==';'||buff[0]=='\0') continue;
 		brk=strchr(buff,':');
@@ -338,7 +338,11 @@ tBool __FASTCALL__  __udnLoadList( void ) {
 		    return True;
 		}
 		*brk='\0';
-		sscanf(buff,"%016llX",&item.offset);
+		{
+		    unsigned long long _off = 0;
+		    sscanf(buff,"%016llX",&_off);
+		    item.offset = _off;
+		}
 		strncpy(item.name,brk+1,sizeof(item.name));
 		item.name[sizeof(item.name)-1]='\0';
 		blen = strlen(item.name);

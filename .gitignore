@@ -1,0 +1,22 @@
+# Reference material (proprietary Hiew binaries/docs — not for redistribution)
+hiew/
+hiew32demo.zip
+hiew650dosfree.zip
+HemSdk054.zip
+*.zip.part
+
+# Local working dirs / config
+biew-610/
+biew-610-src.tar.bz2
+.git-empty/
+.devin/config.local.json
+
+# Build artifacts
+*.o
+*.a
+*.plist
+biew.exe
+config.mak
+config.log
+compile_commands.json
+lint-*.txt

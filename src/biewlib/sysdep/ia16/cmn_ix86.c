@@ -955,31 +955,38 @@ void __FillCPUInfo(char *buff,unsigned cbBuff,void (*percent_callback)(int))
     if(__eax >= 0x80000004UL) /* means: extended flags + processor name */
     {
 //      __extended_name(extended_name);
+/* CPUID registers are 32 bits wide: store them as 4-byte units.
+ * (On 64-bit hosts 'unsigned long' is 8 bytes and the old punned stores
+ *  overlapped and ran past the end of the buffer.) */
+#define CPUID_BRAND_AT(off,val) \
+      do { unsigned int _v = (unsigned int)(val); \
+           memcpy(&extended_name[off], &_v, sizeof(_v)); } while(0)
       __eax = 0x80000002UL;
       __edx = __cpuid_edx(&__eax);
       __ecx = 0x80000002UL;
       __ebx = __cpuid_ebxecx(&__ecx);
-      *((unsigned long*)&extended_name[ 0]) = __eax;
-      *((unsigned long*)&extended_name[ 4]) = __ebx;
-      *((unsigned long*)&extended_name[ 8]) = __ecx;
-      *((unsigned long*)&extended_name[12]) = __edx;
+      CPUID_BRAND_AT( 0,__eax);
+      CPUID_BRAND_AT( 4,__ebx);
+      CPUID_BRAND_AT( 8,__ecx);
+      CPUID_BRAND_AT(12,__edx);
       __eax = 0x80000003UL;
       __edx = __cpuid_edx(&__eax);
       __ecx = 0x80000003UL;
       __ebx = __cpuid_ebxecx(&__ecx);
-      *((unsigned long*)&extended_name[16]) = __eax;
-      *((unsigned long*)&extended_name[20]) = __ebx;
-      *((unsigned long*)&extended_name[24]) = __ecx;
-      *((unsigned long*)&extended_name[28]) = __edx;
+      CPUID_BRAND_AT(16,__eax);
+      CPUID_BRAND_AT(20,__ebx);
+      CPUID_BRAND_AT(24,__ecx);
+      CPUID_BRAND_AT(28,__edx);
       __eax = 0x80000004UL;
       __edx = __cpuid_edx(&__eax);
       __ecx = 0x80000004UL;
       __ebx = __cpuid_ebxecx(&__ecx);
-      *((unsigned long*)&extended_name[32]) = __eax;
-      *((unsigned long*)&extended_name[36]) = __ebx;
-      *((unsigned long*)&extended_name[40]) = __ecx;
-      *((unsigned long*)&extended_name[44]) = __edx;
-      *((unsigned long*)&extended_name[48]) = 0;
+      CPUID_BRAND_AT(32,__eax);
+      CPUID_BRAND_AT(36,__ebx);
+      CPUID_BRAND_AT(40,__ecx);
+      CPUID_BRAND_AT(44,__edx);
+      CPUID_BRAND_AT(48,0);
+#undef CPUID_BRAND_AT
       sprintf(&buff[strlen(buff)],"%s\n",extended_name);
       {
       __eax = 0x80000001UL;
@@ -1066,7 +1073,7 @@ void __FillCPUInfo(char *buff,unsigned cbBuff,void (*percent_callback)(int))
             ,cpu_cores,2<<apicid);
           sprintf(&buff[strlen(buff)],
 "           %d/%d - Maximal linear / physical address size (bits)\n"
-	    ,(__eax>>8)&0xFF,(__eax)&0xFF);
+	    ,(unsigned)((__eax>>8)&0xFF),(unsigned)((__eax)&0xFF));
         }
         if(__highest_excpuid >= 0x8000000ALU)
         {
@@ -1076,7 +1083,7 @@ void __FillCPUInfo(char *buff,unsigned cbBuff,void (*percent_callback)(int))
           __ebx = __cpuid_ebxecx(&__ecx);
           sprintf(&buff[strlen(buff)],
 "           %02X - SVM revision\n"
-	    ,(__eax)&0xFF);
+	    ,(unsigned)((__eax)&0xFF));
         }
         if(__highest_excpuid >= 0x8000001ALU)
         {
