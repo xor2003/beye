@@ -655,6 +655,21 @@ echocheck "gpm.h"
 	check_header gpm.h
 	enabled gpm_h && _cdefos="-DHAVE_MOUSE $_cdefos" && _oslibs="-lgpm $_oslibs"
 echores "$gpm_h"
+echocheck "curses.h (input decoding)"
+	cat > $TMPC << EOF
+#include <curses.h>
+int main(void) {return 0;}
+EOF
+	_curseslib=
+	cc_check -lcurses && _curseslib="-lcurses"
+	if test -z "$_curseslib" ; then
+	    cc_check -lncurses && _curseslib="-lncurses"
+	fi
+	if test -n "$_curseslib" ; then
+	    _cdefos="-DHAVE_NCURSES $_cdefos"
+	    _oslibs="$_curseslib $_oslibs"
+	fi
+echores "$_curseslib"
 	;;
     unix)
 	_cdefos="-D__UNIX__ -D__OS__=\"unix\" -Uunix -DHAVE_TERMINAL_OUT=1 $_cdefos"

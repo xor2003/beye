@@ -25,11 +25,13 @@
 static const char rcs_id[] = "$Id: keyboard.c,v 1.9 2009/09/20 13:43:37 nickols_k Exp $";
 #endif
 
+#include <dlfcn.h>
 #include <errno.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/time.h>
 
 #include "biewlib/kbd_code.h"
 #include "biewlib/biewlib.h"
@@ -429,6 +431,68 @@ void __FASTCALL__ ReadNextEvent(void)
 		}
 	    }
 	}
+	else
+	{
+	    /* Not a Linux console: ask the X server for the physical
+	       modifier state. xterm-class terminals never report bare
+	       Shift/Ctrl/Alt presses, but when DISPLAY is set we can
+	       poll XQueryPointer which returns the live modifier mask.
+	       libX11 is dlopen'd so there is no hard link dependency. */
+	    static int x11_state = 0; /* 0=untried 1=up -1=unavailable */
+	    static void *x11_dpy = NULL;
+	    static int (*x11_qp)(void *,unsigned long,void *,void *,
+				 int *,int *,int *,int *,unsigned int *) = NULL;
+	    static unsigned long (*x11_root)(void *,int) = NULL;
+	    static int (*x11_scr)(void *) = NULL;
+	    static long x11_ms = 0;
+	    if (x11_state == 0)
+	    {
+		x11_state = -1;
+		if (getenv("DISPLAY"))
+		{
+		    void *h = dlopen("libX11.so.6",RTLD_LAZY|RTLD_LOCAL);
+		    void *(*xop)(const char *);
+		    if (!h) h = dlopen("libX11.so",RTLD_LAZY|RTLD_LOCAL);
+		    if (h &&
+			(xop = (void *(*)(const char *))dlsym(h,"XOpenDisplay")) &&
+			(x11_qp = (int (*)(void *,unsigned long,void *,void *,
+					   int *,int *,int *,int *,
+					   unsigned int *))dlsym(h,"XQueryPointer")) &&
+			(x11_root = (unsigned long (*)(void *,int))dlsym(h,"XRootWindow")) &&
+			(x11_scr = (int (*)(void *))dlsym(h,"XDefaultScreen")) &&
+			(x11_dpy = xop(NULL)))
+			x11_state = 1;
+		}
+	    }
+	    if (x11_state == 1)
+	    {
+		struct timeval tv;
+		long now;
+		gettimeofday(&tv,NULL);
+		now = tv.tv_sec * 1000 + tv.tv_usec / 1000;
+		if (now - x11_ms >= 50)
+		{
+		    unsigned int mask = 0;
+		    void *wr = NULL,*wc = NULL;
+		    int rx = 0,ry = 0,wx = 0,wy = 0;
+		    x11_ms = now;
+		    if (x11_qp(x11_dpy,
+			       x11_root(x11_dpy,x11_scr(x11_dpy)),
+			       &wr,&wc,&rx,&ry,&wx,&wy,&mask))
+		    {
+			int ns = 0;
+			if (mask & 0x01) ns |= KS_SHIFT; /* ShiftMask */
+			if (mask & 0x08) ns |= KS_ALT;   /* Mod1Mask */
+			if (mask & 0x04) ns |= KS_CTRL;  /* ControlMask */
+			if (ns != shift_status)
+			{
+			    shift_status = ns;
+			    ret(KE_SHIFTKEYS);
+			}
+		    }
+		}
+	    }
+	}
     }
 #endif
 
@@ -499,16 +563,17 @@ void __FASTCALL__ ReadNextEvent(void)
     {
 	int j;
 	for (j = 2; j < i && c[j] != ';'; j++) ;
-	if (j < i && j + 2 < i)
+	if (j < i)
 	{
-	    int num = 0, mod;
+	    int num = 0, mod = 0, base = 0;
 	    int k;
 	    for (k = 2; k < j; k++)
 		if (c[k] >= '0' && c[k] <= '9') num = num * 10 + (c[k] - '0');
-	    mod = c[j + 1] - '0';
-	    if (mod >= 1 && mod <= 8)
+	    for (k = j + 1; k < i - 1; k++)
+		if (c[k] >= '0' && c[k] <= '9') mod = mod * 10 + (c[k] - '0');
+	    mod--;	/* modifier param is 1 + bitmask */
+	    if (mod >= 0 && mod <= 7)
 	    {
-		int base = 0;
 		switch (c[i - 1])
 		{
 		    case '~':
@@ -534,16 +599,16 @@ void __FASTCALL__ ReadNextEvent(void)
 			    case 8:  base = KE_END; break;
 			}
 			break;
-		    case 'P': base = (num == 1) ? KE_F(1) : 0; break;
-		    case 'Q': base = (num == 1) ? KE_F(2) : 0; break;
-		    case 'R': base = (num == 1) ? KE_F(3) : 0; break;
-		    case 'S': base = (num == 1) ? KE_F(4) : 0; break;
-		    case 'A': base = (num == 1) ? KE_UPARROW : 0; break;
-		    case 'B': base = (num == 1) ? KE_DOWNARROW : 0; break;
-		    case 'C': base = (num == 1) ? KE_RIGHTARROW : 0; break;
-		    case 'D': base = (num == 1) ? KE_LEFTARROW : 0; break;
-		    case 'H': base = (num == 1) ? KE_HOME : 0; break;
-		    case 'F': base = (num == 1) ? KE_END : 0; break;
+		    case 'P': base = (num <= 1) ? KE_F(1) : 0; break;
+		    case 'Q': base = (num <= 1) ? KE_F(2) : 0; break;
+		    case 'R': base = (num <= 1) ? KE_F(3) : 0; break;
+		    case 'S': base = (num <= 1) ? KE_F(4) : 0; break;
+		    case 'A': base = (num <= 1) ? KE_UPARROW : 0; break;
+		    case 'B': base = (num <= 1) ? KE_DOWNARROW : 0; break;
+		    case 'C': base = (num <= 1) ? KE_RIGHTARROW : 0; break;
+		    case 'D': base = (num <= 1) ? KE_LEFTARROW : 0; break;
+		    case 'H': base = (num <= 1) ? KE_HOME : 0; break;
+		    case 'F': base = (num <= 1) ? KE_END : 0; break;
 		}
 		if (base)
 		{

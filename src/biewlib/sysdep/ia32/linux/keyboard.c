@@ -25,6 +25,7 @@
 static const char rcs_id[] = "$Id: keyboard.c,v 1.14 2009/09/24 09:12:13 nickols_k Exp $";
 #endif
 
+#include <dlfcn.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <signal.h>
@@ -45,6 +46,12 @@ static const char rcs_id[] = "$Id: keyboard.c,v 1.14 2009/09/24 09:12:13 nickols
 #ifdef HAVE_MOUSE
 #include <gpm.h>
 static int gpmhandle;
+#endif
+
+#ifdef HAVE_NCURSES
+#include <curses.h>
+static SCREEN *nc_scr = NULL;
+static FILE *nc_devnull = NULL;
 #endif
 
 #define KBUFSIZE	64	/**< size of keyboard buffer */
@@ -197,8 +204,8 @@ seq4 = {
 seq5 = {
     {'0',KE_F(9)},
     {'1',KE_F(10)},
-    {'3',KE_SHIFT_F(1)},
-    {'4',KE_SHIFT_F(2)},
+    {'3',KE_F(11)},
+    {'4',KE_F(12)},
     {'5',KE_SHIFT_F(3)},
     {'6',KE_SHIFT_F(4)},
     {'8',KE_SHIFT_F(5)},
@@ -309,6 +316,48 @@ static void __FASTCALL__ console_enter(void)
     ReadNextEvent is non-blocking
 */
 
+#ifdef HAVE_NCURSES
+static int __NEAR__ map_curses_key(int ch)
+{
+    if (ch >= 0 && ch <= 255) return ch;	/* raw byte (incl. utf-8 parts) */
+    if (ch >= KEY_F(1) && ch <= KEY_F(63))
+    {
+	int n = ch - KEY_F(0);
+	if (n <= 12) return KE_F(n);
+	if (n <= 24) return KE_SHIFT_F(n - 12);
+	if (n <= 36) return KE_CTL_F(n - 24);
+	if (n <= 48) return KE_SHIFT_F(n - 36) | ADD_CONTROL;
+	if (n <= 60) return KE_ALT_F(n - 48);
+	return KE_ALT_F(n - 60) | ADD_SHIFT;
+    }
+    switch (ch)
+    {
+	case KEY_ENTER:		return KE_ENTER;
+	case KEY_BACKSPACE:	return KE_BKSPACE;
+	case KEY_LEFT:		return KE_LEFTARROW;
+	case KEY_RIGHT:		return KE_RIGHTARROW;
+	case KEY_UP:		return KE_UPARROW;
+	case KEY_DOWN:		return KE_DOWNARROW;
+	case KEY_HOME:		return KE_HOME;
+	case KEY_END:		return KE_END;
+	case KEY_IC:		return KE_INS;
+	case KEY_DC:		return KE_DEL;
+	case KEY_NPAGE:		return KE_PGDN;
+	case KEY_PPAGE:		return KE_PGUP;
+	case KEY_BTAB:		return KE_SHIFT_TAB;
+	case KEY_SLEFT:		return KE_LEFTARROW | ADD_SHIFT;
+	case KEY_SRIGHT:	return KE_RIGHTARROW | ADD_SHIFT;
+	case KEY_SHOME:		return KE_HOME | ADD_SHIFT;
+	case KEY_SEND:		return KE_END | ADD_SHIFT;
+	case KEY_SDC:		return KE_DEL | ADD_SHIFT;
+	case KEY_SIC:		return KE_INS | ADD_SHIFT;
+	case KEY_SNEXT:		return KE_PGDN | ADD_SHIFT;
+	case KEY_SPREVIOUS:	return KE_PGUP | ADD_SHIFT;
+    }
+    return 0;
+}
+#endif
+
 void __FASTCALL__ ReadNextEvent(void)
 {
 #define get(x)	read(in_fd,&(x),1)
@@ -408,9 +457,47 @@ void __FASTCALL__ ReadNextEvent(void)
 	    }
         } else {
 /*
-    VT100 emulation
+    VT100 emulation — ncurses decodes the input stream when available
+    (its internal fifo completes escape sequences split across reads);
+    the hand-rolled parser below remains as a fallback.
 */
 	    unsigned char c[SEQ_LEN];
+
+#ifdef HAVE_NCURSES
+	    if (nc_scr)
+	    {
+		int ch;
+		while ((ch = getch()) != ERR)
+		{
+		    if (ch == KEY_MOUSE)
+		    {
+			MEVENT me;
+			if (getmouse(&me) == OK)
+			{
+			    int m = 0;
+			    if (me.bstate & (BUTTON1_PRESSED|BUTTON1_CLICKED))
+				{ m = 1; mouse.buttons |= MS_LEFTPRESS; }
+			    if (me.bstate & (BUTTON2_PRESSED|BUTTON2_CLICKED))
+				{ m = 1; mouse.buttons |= MS_MIDDLEPRESS; }
+			    if (me.bstate & (BUTTON3_PRESSED|BUTTON3_CLICKED))
+				{ m = 1; mouse.buttons |= MS_RIGHTPRESS; }
+			    if (me.bstate & (BUTTON1_RELEASED|BUTTON2_RELEASED|BUTTON3_RELEASED))
+				mouse.buttons = mouse.pressed = 0;
+			    else mouse.pressed = 1;
+			    mouse.x = me.x;
+			    mouse.y = me.y;
+			    if (m) ret(KE_MOUSE);
+			}
+			continue;
+		    }
+		    key = map_curses_key(ch);
+		    if (!key) continue;
+		    if(rawkb_mode) { rawkb_buf[0]=(unsigned char)ch; rawkb_len=1; }
+		    goto place_key;
+		}
+		return;
+	    }
+#endif
 
 	    if (get(c[0]) < 0) return;
 	    
@@ -469,6 +556,73 @@ void __FASTCALL__ ReadNextEvent(void)
     translate escape sequence
 */
 
+    /*
+       xterm/modern terminal modifier form: ESC [ <num> ; <mod> <final>
+       where mod: 2=Shift 3=Alt 4=Shift+Alt 5=Ctrl 6=Shift+Ctrl
+                  7=Alt+Ctrl 8=Shift+Alt+Ctrl
+    */
+    if (!key && c[1] == '[')
+    {
+	int j;
+	for (j = 2; j < i && c[j] != ';'; j++) ;
+	if (j < i)
+	{
+	    int num = 0, mod = 0, base = 0;
+	    int k;
+	    for (k = 2; k < j; k++)
+		if (c[k] >= '0' && c[k] <= '9') num = num * 10 + (c[k] - '0');
+	    for (k = j + 1; k < i - 1; k++)
+		if (c[k] >= '0' && c[k] <= '9') mod = mod * 10 + (c[k] - '0');
+	    mod--;	/* modifier param is 1 + bitmask */
+	    if (mod >= 0 && mod <= 7)
+	    {
+		switch (c[i - 1])
+		{
+		    case '~':
+			switch (num)
+			{
+			    case 11: base = KE_F(1); break;
+			    case 12: base = KE_F(2); break;
+			    case 13: base = KE_F(3); break;
+			    case 14: base = KE_F(4); break;
+			    case 15: base = KE_F(5); break;
+			    case 17: base = KE_F(6); break;
+			    case 18: base = KE_F(7); break;
+			    case 19: base = KE_F(8); break;
+			    case 20: base = KE_F(9); break;
+			    case 21: base = KE_F(10); break;
+			    case 23: base = KE_F(11); break;
+			    case 24: base = KE_F(12); break;
+			    case 2:  base = KE_INS; break;
+			    case 3:  base = KE_DEL; break;
+			    case 5:  base = KE_PGUP; break;
+			    case 6:  base = KE_PGDN; break;
+			    case 7:  base = KE_HOME; break;
+			    case 8:  base = KE_END; break;
+			}
+			break;
+		    case 'P': base = (num <= 1) ? KE_F(1) : 0; break;
+		    case 'Q': base = (num <= 1) ? KE_F(2) : 0; break;
+		    case 'R': base = (num <= 1) ? KE_F(3) : 0; break;
+		    case 'S': base = (num <= 1) ? KE_F(4) : 0; break;
+		    case 'A': base = (num <= 1) ? KE_UPARROW : 0; break;
+		    case 'B': base = (num <= 1) ? KE_DOWNARROW : 0; break;
+		    case 'C': base = (num <= 1) ? KE_RIGHTARROW : 0; break;
+		    case 'D': base = (num <= 1) ? KE_LEFTARROW : 0; break;
+		    case 'H': base = (num <= 1) ? KE_HOME : 0; break;
+		    case 'F': base = (num <= 1) ? KE_END : 0; break;
+		}
+		if (base)
+		{
+		    key = base;
+		    if (mod & 1) key |= ADD_SHIFT;
+		    if (mod & 2) key |= ADD_ALT;
+		    if (mod & 4) key |= ADD_CONTROL;
+		}
+	    }
+	}
+    }
+
 #define S S[i]
 	    for (i = 0; i < SEQ_NUM && !key; i++) {
 		int j, n;
@@ -516,6 +670,72 @@ int __FASTCALL__ __kbdTestKey(unsigned long flg)
     return keybuf.current;
 }
 
+/*
+   When not on a Linux console (xterm/Konsole/ssh) the terminal protocol
+   never reports bare Shift/Ctrl/Alt presses, so the prompt bar cannot
+   track modifier rows. If DISPLAY is set we can ask the X server for
+   the physical modifier mask directly via XQueryPointer. libX11 is
+   dlopen'd so there is no hard link dependency; on Wayland XWayland
+   reports the same state.
+*/
+static void __NEAR__ poll_x11_modifiers(void)
+{
+    static int x11_state = 0; /* 0=untried 1=up -1=unavailable */
+    static void *x11_dpy = NULL;
+    static int (*x11_qp)(void *,unsigned long,void *,void *,
+			 int *,int *,int *,int *,unsigned int *) = NULL;
+    static unsigned long (*x11_root)(void *,int) = NULL;
+    static int (*x11_scr)(void *) = NULL;
+    static long x11_ms = 0;
+    if (x11_state == 0)
+    {
+	x11_state = -1;
+	if (getenv("DISPLAY"))
+	{
+	    void *h = dlopen("libX11.so.6",RTLD_LAZY|RTLD_LOCAL);
+	    void *(*xop)(const char *);
+	    if (!h) h = dlopen("libX11.so",RTLD_LAZY|RTLD_LOCAL);
+	    if (h &&
+		(xop = (void *(*)(const char *))dlsym(h,"XOpenDisplay")) &&
+		(x11_qp = (int (*)(void *,unsigned long,void *,void *,
+				   int *,int *,int *,int *,
+				   unsigned int *))dlsym(h,"XQueryPointer")) &&
+		(x11_root = (unsigned long (*)(void *,int))dlsym(h,"XRootWindow")) &&
+		(x11_scr = (int (*)(void *))dlsym(h,"XDefaultScreen")) &&
+		(x11_dpy = xop(NULL)))
+		x11_state = 1;
+	}
+    }
+    if (x11_state == 1)
+    {
+	struct timeval tv;
+	long now;
+	gettimeofday(&tv,NULL);
+	now = tv.tv_sec * 1000 + tv.tv_usec / 1000;
+	if (now - x11_ms >= 50)
+	{
+	    unsigned int mask = 0;
+	    void *wr = NULL,*wc = NULL;
+	    int rx = 0,ry = 0,wx = 0,wy = 0;
+	    x11_ms = now;
+	    if (x11_qp(x11_dpy,
+		       x11_root(x11_dpy,x11_scr(x11_dpy)),
+		       &wr,&wc,&rx,&ry,&wx,&wy,&mask))
+	    {
+		int ns = 0;
+		if (mask & 0x01) ns |= KS_SHIFT; /* ShiftMask */
+		if (mask & 0x08) ns |= KS_ALT;   /* Mod1Mask */
+		if (mask & 0x04) ns |= KS_CTRL;  /* ControlMask */
+		if (ns != shift_status)
+		{
+		    shift_status = ns;
+		    pushEvent(KE_SHIFTKEYS);
+		}
+	    }
+	}
+    }
+}
+
 int __FASTCALL__ __kbdGetKey (unsigned long flg)
 {
     int key = 0, s = 0;
@@ -524,6 +744,11 @@ int __FASTCALL__ __kbdGetKey (unsigned long flg)
 
     while (!keybuf.current) {
 	__OsYield();
+	if (!on_console) { poll_x11_modifiers();
+#ifdef HAVE_NCURSES
+	    if (nc_scr) ReadNextEvent();
+#endif
+	}
 #ifdef	HAVE_MOUSE
 	if (gpmhandle) ReadNextEvent();
 #endif
@@ -608,6 +833,55 @@ void __FASTCALL__ __init_keyboard(const char *user_cp)
 	on_console = 0;
     }
 
+#ifdef HAVE_NCURSES
+    if (!on_console)
+    {
+	/* ncurses owns input decoding on non-console terminals: its
+	   fifo completes escape sequences split across reads and its
+	   ESCDELAY wait distinguishes a lone ESC from a sequence.
+	   Output stays with the twin layer, so curses gets /dev/null. */
+	nc_devnull = fopen("/dev/null","w");
+	if (nc_devnull) nc_scr = newterm(NULL,nc_devnull,stdin);
+	if (nc_scr)
+	{
+	    static const int fbnum[12] = { 1,1,1,1,15,17,18,19,20,21,23,24 };
+	    static const char flet[4] = "PQRS";
+	    int f,m;
+	    set_term(nc_scr);
+	    cbreak(); noecho(); nonl();
+	    intrflush(stdscr,FALSE);
+	    keypad(stdscr,TRUE);
+	    nodelay(stdscr,TRUE);
+	    set_escdelay(25);
+	    mousemask(ALL_MOUSE_EVENTS,NULL);
+	    /* bind the whole xterm modifier-F matrix even if this
+	       terminfo entry lacks it (2=Shift 3=Alt 4=Shift+Alt
+	       5=Ctrl 6=Shift+Ctrl) */
+	    for (f = 0; f < 12; f++)
+		for (m = 2; m <= 6; m++)
+		{
+		    char sq[24];
+		    int kc;
+		    switch (m)
+		    {
+			case 2: kc = KEY_F(f + 13); break;
+			case 3: kc = KEY_F(f + 49); break;
+			case 4: kc = KEY_F(f + 61); break;
+			case 5: kc = KEY_F(f + 25); break;
+			default:kc = KEY_F(f + 37); break;
+		    }
+		    if (f < 4)	snprintf(sq,sizeof(sq),"\033[1;%d%c",m,flet[f]);
+		    else	snprintf(sq,sizeof(sq),"\033[%d;%d~",fbnum[f],m);
+		    if (!key_defined(sq)) define_key(sq,kc);
+		}
+	}
+	else
+	{
+	    if (nc_devnull) { fclose(nc_devnull); nc_devnull = NULL; }
+	}
+    }
+#endif
+
 #ifdef HAVE_ICONV
     {
     const char *screen_cp;
@@ -653,6 +927,16 @@ void __FASTCALL__ __term_keyboard(void)
 {
 #ifdef HAVE_ICONV
     nls_term(nls_handle);
+#endif
+#ifdef HAVE_NCURSES
+    if (nc_scr)
+    {
+	mousemask(0,NULL);
+	endwin();
+	delscreen(nc_scr);
+	nc_scr = NULL;
+	if (nc_devnull) { fclose(nc_devnull); nc_devnull = NULL; }
+    }
 #endif
     if (on_console) ioctl(in_fd, KDSKBMODE, K_XLATE);
     tcsetattr(in_fd, TCSANOW, &sattr);
