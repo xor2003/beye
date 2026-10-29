@@ -57,6 +57,7 @@ fileutil.o\
 info_win.o\
 mainloop.o\
 refs.o\
+resize.o\
 search.o\
 setup.o\
 sysinfo.o\
@@ -232,6 +233,7 @@ fileutil.o:                   fileutil.c
 info_win.o:                   info_win.c
 mainloop.o:                   mainloop.c
 refs.o:                       refs.c
+resize.o:                     resize.c
 search.o:                     search.c
 setup.o:                      setup.c
 sysinfo.o:                    sysinfo.c

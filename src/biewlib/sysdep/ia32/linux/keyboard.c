@@ -336,21 +336,28 @@ static void __FASTCALL__ console_enter(void)
 */
 
 #ifdef HAVE_NOTCURSES
+/* terminfo maps modified F-keys to F13+ (ncurses convention):
+   +12 shift, +24 ctrl, +36 ctrl+shift, +48 alt.
+   n is the raw F-number (1..60); returns KE_F(base)|ADD_* or 0. */
+unsigned __FASTCALL__ __kbdModFKey(unsigned n)
+{
+    unsigned f, grp, k;
+    if (!n || n > 60) return 0;
+    n--;
+    f = (n % 12) + 1;
+    grp = n / 12;
+    k = KE_F(f);
+    if (grp & 1) k |= ADD_SHIFT;
+    if (grp & 2) k |= ADD_CONTROL;
+    if (grp & 4) k |= ADD_ALT;
+    return k;
+}
+
 static int __NEAR__ map_nc_input(const ncinput *ni)
 {
     int k = 0;
     unsigned id = ni->id;
-    if (id >= NCKEY_F01 && id <= NCKEY_F60)
-    {
-	/* terminfo maps modified F-keys to F13+ (ncurses convention):
-	   +12 shift, +24 ctrl, +36 ctrl+shift, +48 alt */
-	unsigned n = id - NCKEY_F01;
-	unsigned f = (n % 12) + 1, grp = n / 12;
-	k = KE_F(f);
-	if (grp & 1) k |= ADD_SHIFT;
-	if (grp & 2) k |= ADD_CONTROL;
-	if (grp & 4) k |= ADD_ALT;
-    }
+    if (id >= NCKEY_F01 && id <= NCKEY_F60) k = __kbdModFKey(id - NCKEY_F01 + 1);
     else if (id < 0x80) k = (int)id;
     else switch (id)
     {
