@@ -939,7 +939,14 @@ void __FASTCALL__ __init_keyboard(const char *user_cp)
 
     keybuf.current = 0;
 
+    /* With ncurses decoding, getch() runs only from the __kbdGetKey
+       poll loop. Running it from the SIGIO handler would re-enter
+       ncurses (and keybuf/pushEvent) inside a signal — crashes. */
+#ifdef HAVE_NCURSES
+    signal(SIGIO, nc_scr ? dummy_handler : (void *)ReadNextEvent);
+#else
     signal(SIGIO, (void *) ReadNextEvent);
+#endif
 }
 
 void __FASTCALL__ __term_keyboard(void)
