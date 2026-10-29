@@ -246,8 +246,17 @@ void __FASTCALL__ arg_segoff(char * str,ix86Param *DisP)
   unsigned short seg = 0;
   if(!((DisP->flags & __DISF_SIZEONLY) == __DISF_SIZEONLY))
   {
-    seg = USE_WIDE_DATA ? *((tInt16  *)(&DisP->RealCmd[5])) : *((tInt16  *)(&DisP->RealCmd[3]));
-    off = USE_WIDE_DATA ? *((tInt32  *)(&DisP->RealCmd[1])) : (tInt32)(*((tInt16  *)(&DisP->RealCmd[1])));
+    tInt16 _v16;
+    memcpy(&_v16,&DisP->RealCmd[USE_WIDE_DATA?5:3],sizeof(_v16)); seg = _v16;
+    if(USE_WIDE_DATA)
+    {
+      tInt32 _v32;
+      memcpy(&_v32,&DisP->RealCmd[1],sizeof(_v32)); off = _v32;
+    }
+    else
+    {
+      memcpy(&_v16,&DisP->RealCmd[1],sizeof(_v16)); off = (tInt32)_v16;
+    }
     newpos = ((long)(seg) << 4) + off; /* It is computing of x86 real-mode address */
   }
   DisP->codelen += USE_WIDE_DATA ? 6 : 4;
@@ -263,9 +272,11 @@ void __FASTCALL__ arg_offset(char * str,ix86Param *DisP)
   unsigned modifier,off8;
   off8 = (DisP->insn_flags&IMM_BYTE)?1:0;
   if(!((DisP->flags & __DISF_SIZEONLY) == __DISF_SIZEONLY))
-    lshift =	off8 ? (long)(*((tInt8  *)(&DisP->RealCmd[1]))):
-		USE_WIDE_DATA ?(long)(*((tInt32  *)(&DisP->RealCmd[1]))) :
-					(long)(*((tInt16  *)(&DisP->RealCmd[1])));
+  {
+    if(off8) lshift = (long)(*((tInt8 *)(&DisP->RealCmd[1])));
+    else if(USE_WIDE_DATA) { tInt32 _v; memcpy(&_v,&DisP->RealCmd[1],sizeof(_v)); lshift = (long)_v; }
+    else                   { tInt16 _v; memcpy(&_v,&DisP->RealCmd[1],sizeof(_v)); lshift = (long)_v; }
+  }
 #if 0
 /*
 In 64-bit mode, the operand size defaults to 64 bits. The processor sign-extends
