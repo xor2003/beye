@@ -48,11 +48,29 @@ static const char rcs_id[] = "$Id: keyboard.c,v 1.14 2009/09/24 09:12:13 nickols
 static int gpmhandle;
 #endif
 
+#ifdef HAVE_NOTCURSES
+#include <notcurses/notcurses.h>
+extern struct notcurses *biew_nc;	/* created by __init_vio (non-console) */
+#endif
+
 #ifdef HAVE_NCURSES
 #include <curses.h>
 static SCREEN *nc_scr = NULL;
 static FILE *nc_devnull = NULL;
 #endif
+
+/* true when a terminal library (ncurses or notcurses) owns input
+   decoding on this terminal */
+static int __NEAR__ termlib_input(void)
+{
+#ifdef HAVE_NOTCURSES
+    if (biew_nc) return 1;
+#endif
+#ifdef HAVE_NCURSES
+    if (nc_scr) return 1;
+#endif
+    return 0;
+}
 
 #define KBUFSIZE	64	/**< size of keyboard buffer */
 #define KSCANSIZE	84	/**< size of scancode table */
@@ -316,6 +334,43 @@ static void __FASTCALL__ console_enter(void)
     ReadNextEvent is non-blocking
 */
 
+#ifdef HAVE_NOTCURSES
+static int __NEAR__ map_nc_input(const ncinput *ni)
+{
+    int k = 0;
+    unsigned id = ni->id;
+    if (id >= NCKEY_F01 && id <= NCKEY_F12) k = KE_F(id - NCKEY_F00);
+    else if (id < 0x80) k = (int)id;
+    else switch (id)
+    {
+	case NCKEY_ENTER:	k = KE_ENTER; break;
+	case NCKEY_UP:		k = KE_UPARROW; break;
+	case NCKEY_DOWN:	k = KE_DOWNARROW; break;
+	case NCKEY_LEFT:	k = KE_LEFTARROW; break;
+	case NCKEY_RIGHT:	k = KE_RIGHTARROW; break;
+	case NCKEY_HOME:	k = KE_HOME; break;
+	case NCKEY_END:		k = KE_END; break;
+	case NCKEY_INS:		k = KE_INS; break;
+	case NCKEY_DEL:		k = KE_DEL; break;
+	case NCKEY_PGUP:	k = KE_PGUP; break;
+	case NCKEY_PGDOWN:	k = KE_PGDN; break;
+	case NCKEY_BACKSPACE:	k = KE_BKSPACE; break;
+	case NCKEY_RESIZE:
+	    {
+		unsigned ny, nx;
+		notcurses_stddim_yx(biew_nc, &ny, &nx);
+		tvioWidth = nx; tvioHeight = ny;
+	    }
+	    return 0;
+    }
+    if (!k) return 0;
+    if (ncinput_shift_p(ni)) k |= ADD_SHIFT;
+    if (ncinput_alt_p(ni))   k |= ADD_ALT;
+    if (ncinput_ctrl_p(ni))  k |= ADD_CONTROL;
+    return k;
+}
+#endif
+
 #ifdef HAVE_NCURSES
 static int __NEAR__ map_curses_key(int ch)
 {
@@ -463,6 +518,36 @@ void __FASTCALL__ ReadNextEvent(void)
 */
 	    unsigned char c[SEQ_LEN];
 
+#ifdef HAVE_NOTCURSES
+	    if (biew_nc)
+	    {
+		ncinput ni;
+		while (notcurses_get_nblock(biew_nc, &ni))
+		{
+		    int kc;
+		    if (ni.evtype == NCTYPE_RELEASE) continue;
+		    if (ni.id >= NCKEY_BUTTON1 && ni.id <= NCKEY_BUTTON3)
+		    {
+			if (ni.evtype != NCTYPE_RELEASE)
+			{
+			    mouse.x = ni.x; mouse.y = ni.y;
+			    mouse.pressed = 1;
+			    if (ni.id == NCKEY_BUTTON1) mouse.buttons |= MS_LEFTPRESS;
+			    if (ni.id == NCKEY_BUTTON2) mouse.buttons |= MS_MIDDLEPRESS;
+			    if (ni.id == NCKEY_BUTTON3) mouse.buttons |= MS_RIGHTPRESS;
+			    ret(KE_MOUSE);
+			}
+			continue;
+		    }
+		    kc = map_nc_input(&ni);
+		    if (!kc) continue;
+		    key = kc;
+		    if(rawkb_mode) { rawkb_buf[0]=(unsigned char)ni.id; rawkb_len=1; }
+		    goto place_key;
+		}
+		return;
+	    }
+#endif
 #ifdef HAVE_NCURSES
 	    if (nc_scr)
 	    {
@@ -764,8 +849,8 @@ int __FASTCALL__ __kbdGetKey (unsigned long flg)
     while (!keybuf.current) {
 	__OsYield();
 	if (!on_console) { poll_x11_modifiers();
-#ifdef HAVE_NCURSES
-	    if (nc_scr) ReadNextEvent();
+#if defined(HAVE_NCURSES) || defined(HAVE_NOTCURSES)
+	    if (termlib_input()) ReadNextEvent();
 #endif
 	}
 #ifdef	HAVE_MOUSE
@@ -853,7 +938,11 @@ void __FASTCALL__ __init_keyboard(const char *user_cp)
     }
 
 #ifdef HAVE_NCURSES
-    if (!on_console)
+    if (!on_console
+#ifdef HAVE_NOTCURSES
+	&& !biew_nc	/* notcurses already owns input+output */
+#endif
+	)
     {
 	/* ncurses owns input decoding on non-console terminals: its
 	   fifo completes escape sequences split across reads and its
@@ -939,14 +1028,14 @@ void __FASTCALL__ __init_keyboard(const char *user_cp)
 
     keybuf.current = 0;
 
-    /* With ncurses decoding, getch() runs only from the __kbdGetKey
-       poll loop. Running it from the SIGIO handler would re-enter
-       ncurses (and keybuf/pushEvent) inside a signal — crashes. */
-#ifdef HAVE_NCURSES
-    signal(SIGIO, nc_scr ? dummy_handler : (void *)ReadNextEvent);
-#else
-    signal(SIGIO, (void *) ReadNextEvent);
+    /* With a terminal library decoding (ncurses/notcurses), input is
+       drained only from the __kbdGetKey poll loop — never inside a
+       signal, which would re-enter the library and keybuf/pushEvent. */
+#if defined(HAVE_NCURSES) || defined(HAVE_NOTCURSES)
+    if (termlib_input()) { signal(SIGIO, dummy_handler); }
+    else
 #endif
+    signal(SIGIO, (void *) ReadNextEvent);
 }
 
 void __FASTCALL__ __term_keyboard(void)

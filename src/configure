@@ -655,6 +655,19 @@ echocheck "gpm.h"
 	check_header gpm.h
 	enabled gpm_h && _cdefos="-DHAVE_MOUSE $_cdefos" && _oslibs="-lgpm $_oslibs"
 echores "$gpm_h"
+echocheck "notcurses.h (terminal library)"
+	cat > $TMPC << EOF
+#include <notcurses/notcurses.h>
+int main(void) {return 0;}
+EOF
+	_nclib=
+	cc_check -lnotcurses -lnotcurses-core && _nclib="-lnotcurses -lnotcurses-core"
+	if test -n "$_nclib" ; then
+	    _cdefos="-DHAVE_NOTCURSES $_cdefos"
+	    _oslibs="$_nclib $_oslibs"
+	fi
+echores "$_nclib"
+	if test -z "$_nclib" ; then
 echocheck "curses.h (input decoding)"
 	cat > $TMPC << EOF
 #include <curses.h>
@@ -670,6 +683,7 @@ EOF
 	    _oslibs="$_curseslib $_oslibs"
 	fi
 echores "$_curseslib"
+	fi
 	;;
     unix)
 	_cdefos="-D__UNIX__ -D__OS__=\"unix\" -Uunix -DHAVE_TERMINAL_OUT=1 $_cdefos"

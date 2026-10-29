@@ -84,6 +84,32 @@ static unsigned is_unicode=0;
 
 static void *nls_handle;
 
+#ifdef HAVE_NOTCURSES
+#include <notcurses/notcurses.h>
+
+/* notcurses owns both rasterization (here) and input decoding
+   (keyboard.c) on non-console terminals. nc==NULL -> legacy ANSI path. */
+struct notcurses *biew_nc = NULL;
+static struct ncplane *nc_stdp = NULL;
+
+/* CP437/DOS pseudographics 0xb0-0xdf (_PSMIN.._PSMAX) -> UTF-8 */
+static const char *nc_ps437[0x30] = {
+    "\xe2\x96\x91","\xe2\x96\x92","\xe2\x96\x93","\xe2\x94\x82",
+    "\xe2\x94\xa4","\xe2\x95\xa1","\xe2\x95\xa2","\xe2\x95\x96",
+    "\xe2\x95\x95","\xe2\x95\xa3","\xe2\x95\x91","\xe2\x95\x97",
+    "\xe2\x95\x9d","\xe2\x95\x9c","\xe2\x95\x9b","\xe2\x94\x90",
+    "\xe2\x94\x94","\xe2\x94\xb4","\xe2\x94\xac","\xe2\x94\x9c",
+    "\xe2\x94\x80","\xe2\x94\xbc","\xe2\x95\x9e","\xe2\x95\x9f",
+    "\xe2\x95\x9a","\xe2\x95\x94","\xe2\x95\xa9","\xe2\x95\xa6",
+    "\xe2\x95\xa0","\xe2\x95\x90","\xe2\x95\xac","\xe2\x95\xa7",
+    "\xe2\x95\xa8","\xe2\x95\xa4","\xe2\x95\xa5","\xe2\x95\x99",
+    "\xe2\x95\x98","\xe2\x95\x92","\xe2\x95\x93","\xe2\x95\xab",
+    "\xe2\x95\xaa","\xe2\x94\x98","\xe2\x94\x8c","\xe2\x96\x88",
+    "\xe2\x96\x84","\xe2\x96\x8c","\xe2\x96\x90","\xe2\x96\x80"
+};
+
+#endif
+
 
 #define twrite(x)	write(out_fd, (x), strlen(x))
 #define _addr(x, y)	(viomem + (x) + (y) * tvioWidth)
@@ -115,6 +141,15 @@ static struct {
     unsigned char last;
     unsigned char color[0x10];
 } tp = { 0, {0} };
+
+#ifdef HAVE_NOTCURSES
+static int __NEAR__ __FASTCALL__ nc_is_transp(int bg)
+{
+    int i;
+    for (i = 0; i < tp.last; i++) if (bg == tp.color[i]) return 1;
+    return 0;
+}
+#endif
 
 static char *__FASTCALL__ _2ansi(unsigned char attr)
 {
@@ -167,6 +202,13 @@ int __FASTCALL__ __vioGetCursorType( void )
 void __FASTCALL__ __vioSetCursorType(int type)
 {
     cursor_type = type;
+#ifdef HAVE_NOTCURSES
+    if (biew_nc) {
+	if (type == __TVIO_CUR_OFF) notcurses_cursor_disable(biew_nc);
+	else notcurses_cursor_enable(biew_nc, saveY, saveX);
+	return;
+    }
+#endif
     if	(terminal->type == TERM_LINUX && (cursor_type == __TVIO_CUR_SOLID || type == __TVIO_CUR_SOLID)) {
 	sprintf(vtmp,"\033[?%dc", type == __TVIO_CUR_SOLID ? 7 : 0);
 	twrite(vtmp);
@@ -185,6 +227,12 @@ void __FASTCALL__ __vioSetCursorPos(tAbsCoord x, tAbsCoord y)
 {
     saveX = x;
     saveY = y;
+#ifdef HAVE_NOTCURSES
+    if (biew_nc) {
+	if (cursor_type != __TVIO_CUR_OFF) notcurses_cursor_enable(biew_nc, y, x);
+	return;
+    }
+#endif
     gotoxy(x, y);
 }
 
@@ -217,6 +265,40 @@ void __FASTCALL__ __vioWriteBuff(tAbsCoord x, tAbsCoord y, const tvioBuff *buff,
     memcpy(addr + violen, buff->chars, len);
     memcpy(addr + (violen << 1), buff->oem_pg, len);
 
+#ifdef HAVE_NOTCURSES
+    if (biew_nc) {
+	unsigned i;
+	for (i = 0; i < len; i++) {
+	    unsigned char c  = buff->chars[i];
+	    unsigned char ca = buff->attrs[i];
+	    unsigned char cp = buff->oem_pg[i];
+	    const char *egc = " ";
+	    char utf[8];
+	    int fg = _2color(ca & 7) | ((ca & 8) ? 8 : 0);
+	    int bg = _2color(_bg(ca) & 7) | ((ca & 0x80) ? 8 : 0);
+
+	    if (c && printable(c)) {
+		if (cp >= _PSMIN && cp <= _PSMAX) {
+		    egc = nc_ps437[cp - _PSMIN];
+		} else {
+		    unsigned l = 1;
+		    char *destb = nls_recode2screen_cp(nls_handle, &c, &l);
+		    if (destb) {
+			if (l > sizeof(utf) - 1) l = sizeof(utf) - 1;
+			memcpy(utf, destb, l); utf[l] = 0;
+			free(destb);
+			egc = utf;
+		    }
+		}
+	    } else if (c) egc = ".";
+	    ncplane_set_fg_palindex(nc_stdp, fg);
+	    if (nc_is_transp(_bg(ca))) ncplane_set_bg_palindex(nc_stdp, 0);
+	    else ncplane_set_bg_palindex(nc_stdp, bg);
+	    ncplane_putegc_yx(nc_stdp, y, x + i, egc, NULL);
+	}
+	notcurses_render(biew_nc);
+    } else
+#endif
     if (on_console) {
 
         __INTERLEAVE_BUFFERS(len, pb, buff->chars, buff->attrs);
@@ -350,6 +432,22 @@ void __FASTCALL__ __init_vio(const char *user_cp,unsigned long flags)
 	ioctl(out_fd, TIOCGWINSZ, &w);
 	tvioWidth = w.ws_col;
 	tvioHeight = w.ws_row;
+#ifdef HAVE_NOTCURSES
+	{
+	    notcurses_options nopts;
+	    memset(&nopts, 0, sizeof(nopts));
+	    nopts.flags = NCOPTION_SUPPRESS_BANNERS | NCOPTION_NO_FONT_CHANGES;
+	    biew_nc = notcurses_init(&nopts, stdout);
+	    if (biew_nc) {
+		unsigned ny, nx;
+		nc_stdp = notcurses_stdplane(biew_nc);
+		notcurses_stddim_yx(biew_nc, &ny, &nx);
+		tvioWidth = nx; tvioHeight = ny;
+		notcurses_mice_enable(biew_nc, NCMICE_ALL_EVENTS);
+		is_unicode = 1;
+	    }
+	}
+#endif
     }
 #ifdef HAVE_ICONV
     screen_cp=nls_get_screen_cp();
@@ -394,6 +492,10 @@ void __FASTCALL__ __init_vio(const char *user_cp,unsigned long flags)
 	}
     } else {
 	twrite(VT100_NORMALCHARS VT100_MODE80);
+#ifdef HAVE_NOTCURSES
+	if (biew_nc) { /* notcurses manages screen + title itself */
+	} else
+#endif
 	if (terminal->type != TERM_LINUX) {
 	    do_nls = 1;
 	    output_G1 = 1;
@@ -427,13 +529,19 @@ void __FASTCALL__ __term_vio(void)
     if (!initialized) return;
 
     __vioSetCursorType(__TVIO_CUR_NORM);
-    if (!on_console) {
-	if (terminal->type == TERM_XTERM) twrite("\033[?1001r\033[?1000l");
-	if (terminal->type != TERM_XTERM || transparent)
-	    twrite("\033(K");
-	twrite(VT100_MODE80 VT100_NORMALCHARS VT100_CLEARSCREEN);
+#ifdef HAVE_NOTCURSES
+    if (biew_nc) { notcurses_stop(biew_nc); biew_nc = NULL; nc_stdp = NULL; }
+    else
+#endif
+    {
+	if (!on_console) {
+	    if (terminal->type == TERM_XTERM) twrite("\033[?1001r\033[?1000l");
+	    if (terminal->type != TERM_XTERM || transparent)
+		twrite("\033(K");
+	    twrite(VT100_MODE80 VT100_NORMALCHARS VT100_CLEARSCREEN);
+	}
+	__vioSetCursorPos(firstX, firstY);
     }
-    __vioSetCursorPos(firstX, firstY);
 
     nls_term(nls_handle);
     if (on_console) close(viohandle);
