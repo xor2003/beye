@@ -69,6 +69,7 @@ static int is_unicode=0;
 #include <fcntl.h>
 #include <termios.h>
 #include <unistd.h>
+#include <sys/ioctl.h>
 #include <sys/time.h>
 char *rawkb_name="VT100";
 unsigned rawkb_size=sizeof(char); /* size of rawkb_buf elements 1,2 or 4*/
@@ -394,6 +395,39 @@ void __FASTCALL__ ReadNextEvent(void)
 		mouse.pressed = 1;
 		if (mouse.buttons) ret(KE_MOUSE);
 	    } else if (ge.type & GPM_UP) mouse.pressed = 0;
+	}
+    }
+#endif
+
+#ifdef __linux__
+    /* Linux console reports modifier state via TIOCL_GETSHIFTSTATE —
+       poll it so the prompt bar updates when Shift/Ctrl/Alt is pressed
+       alone (xterm-class terminals have no way to report this). */
+    {
+	static int con_fd = -2;
+	if (con_fd == -2)
+	{
+	    char sc = 6;
+	    con_fd = -1;
+	    if (isatty(in_fd) && ioctl(in_fd, 0x541C /*TIOCLINUX*/, &sc) >= 0)
+		con_fd = in_fd;
+	}
+	if (con_fd >= 0)
+	{
+	    char sc = 6;
+	    int st = ioctl(con_fd, 0x541C, &sc);
+	    if (st >= 0)
+	    {
+		int ns = 0;
+		if (st & 0x01 || st & 0x10 || st & 0x20) ns |= KS_SHIFT;
+		if (st & 0x08 || st & 0x02)                ns |= KS_ALT;
+		if (st & 0x04 || st & 0x40 || st & 0x80)   ns |= KS_CTRL;
+		if (ns != shift_status)
+		{
+		    shift_status = ns;
+		    ret(KE_SHIFTKEYS);
+		}
+	    }
 	}
     }
 #endif
