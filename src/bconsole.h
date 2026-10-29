@@ -30,6 +30,7 @@ extern "C" {
 
 extern TWindow *MainWnd,*HelpWnd,*TitleWnd,*CritErrWnd;
 
+extern void         __FASTCALL__ BiewScreenResize( void );
 extern void         __FASTCALL__ initBConsole( unsigned long vio_flg,unsigned long twin_flg );
 extern void         __FASTCALL__ termBConsole( void );
 extern tBool        __FASTCALL__ IsKbdTerminate( void );

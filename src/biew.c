@@ -571,6 +571,43 @@ static void __FASTCALL__ ShowUsage(void) {
     termBConsole();
 }
 
+/** Re-layouts top-level windows after a terminal resize.
+    HelpWnd (the function-key legend) must always sit on the last
+    screen row; TitleWnd/MainWnd span the full width. */
+void __FASTCALL__ BiewScreenResize( void )
+{
+    tAbsCoord x1,y1,x2,y2;
+
+    if(TitleWnd)
+    {
+	twGetWinPos(TitleWnd,&x1,&y1,&x2,&y2);
+	if(x2 != tvioWidth) twResizeWin(TitleWnd,tvioWidth,1);
+    }
+    if(HelpWnd)
+    {
+	int dy;
+	twGetWinPos(HelpWnd,&x1,&y1,&x2,&y2);
+	/* window coords are 0-based: legend must sit on the last row */
+	dy = (int)tvioHeight - 1 - (int)y1;
+	/* tAbsCoord is unsigned so twMoveWin cannot express a negative
+	   delta; hide, shift and show the legend window manually. */
+	if(dy)
+	{
+	    twHideWin(HelpWnd);
+	    HelpWnd->Y1 += dy;
+	    HelpWnd->Y2 += dy;
+	}
+	if(x2 != tvioWidth) twResizeWin(HelpWnd,tvioWidth,1);
+	if(dy) twShowWin(HelpWnd);
+    }
+    /* WindowOpen(1,2,W,H-1) means height == tvioHeight-2 */
+    if(MainWnd) twResizeWin(MainWnd,tvioWidth,tvioHeight - 2);
+    /* repaint order: legend last so it stays on top */
+    if(TitleWnd) twRefreshFullWin(TitleWnd);
+    if(MainWnd)  twRefreshFullWin(MainWnd);
+    if(HelpWnd)  twRefreshFullWin(HelpWnd);
+}
+
 int main( int argc, char *argv[] )
 {
  hIniProfile *ini;

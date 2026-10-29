@@ -189,6 +189,15 @@ extern void      __FASTCALL__ __init_vio(const char *user_cp, unsigned long flag
                     **/
 extern void      __FASTCALL__ __term_vio( void );
 
+                   /** Notifies video handler that the terminal was resized.
+                     * @return                none
+                     * @param w,h             new screen dimensions in text cells
+                     * @note                  reallocates and clears the shadow
+                     *                        screen buffer; caller must re-layout
+                     *                        windows and repaint
+                    **/
+extern void      __FASTCALL__ __vioResize( unsigned w, unsigned h );
+
 #define __TVIO_CUR_OFF   0 /** Defines that cursor in invisible state */
 #define __TVIO_CUR_NORM  1 /**< Defines that cursor in normal state (filles 20% of the character cell) */
 #define __TVIO_CUR_SOLID 2 /**< Defines that cursor in solid state (filles 100% of the character cell) */

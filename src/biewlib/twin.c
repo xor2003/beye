@@ -782,7 +782,7 @@ static void __NEAR__ __FASTCALL__ updatescreencharfrombuff(TWindow *win,
           ms_vis = __MsGetState();
           outx = (unsigned)win->X1+x;
           outy = (unsigned)win->Y1+y;
-          if(outx+1 <= tvioWidth && outy <= tvioHeight)
+          if(outx+1 <= tvioWidth && outy < tvioHeight)
           {
             if(ms_vis)
             {
@@ -868,7 +868,7 @@ static void __NEAR__ __FASTCALL__ updatewinmemcharfromscreen(TWindow *win,tRelCo
         tAbsCoord inx,iny;
         inx = (unsigned)win->X1+x;
         iny = (unsigned)win->Y1+y;
-        if(inx+2 <= tvioWidth && iny <= tvioHeight)
+        if(inx+2 <= tvioWidth && iny < tvioHeight)
         {
           ms_vis = __MsGetState();
           if(ms_vis)
@@ -926,7 +926,7 @@ static void __NEAR__ __FASTCALL__ screen2win(TWindow *win)
       {
         tAbsCoord iny;
         iny = win->Y1+i;
-        if(iny <= tvioHeight)
+        if(iny < tvioHeight)
         {
           idx = i*win->wwidth;
           it.chars = &win->saved.chars[idx];
@@ -969,7 +969,7 @@ void __FASTCALL__ twSnapShot(TWindow *win) /**< for snapshot */
     {
       tAbsCoord iny;
       iny = win->Y1+i;
-      if(iny <= tvioHeight)
+      if(iny < tvioHeight)
       {
         idx = i*win->wwidth;
         it.chars = &win->body.chars[idx];
@@ -1042,7 +1042,7 @@ static void __NEAR__ __FASTCALL__ savedwin2screen(TWindow *win)
         outy = win->Y1+i;
         nwidth = win->wwidth;
         if(outx + nwidth > tvioWidth) nwidth = tvioWidth > outx ? tvioWidth - outx : 0;
-        if(outy <= tvioHeight && nwidth)
+        if(outy < tvioHeight && nwidth)
             __vioWriteBuff(outx,outy,&accel,nwidth);
       }
     }
@@ -1114,7 +1114,7 @@ static void __NEAR__ __FASTCALL__ updatescreen(TWindow *win,tBool full_area)
         {
           outy = win->Y1+i;
           if(cx + rw > tvioWidth) rw = tvioWidth > cx ? tvioWidth - cx : 0;
-          if(outy <= tvioHeight && rw)
+          if(outy < tvioHeight && rw)
           {
             tidx = i*win->wwidth+aoff;
             it.chars = is_top ? &win->body.chars[tidx] : &accel.chars[aoff];
@@ -1169,7 +1169,7 @@ static void __NEAR__ __FASTCALL__ updatescreenpiece(TWindow *win,tRelCoord stx,t
       outx = win->X1+_stx;
       rw = _endx - _stx;
       if(outx + rw > tvioWidth) rw = tvioWidth > outx ? tvioWidth - outx : 0;
-      if(line <= tvioHeight && rw)
+      if(line < tvioHeight && rw)
       {
         tidx = (y-1)*win->wwidth+_stx;
         it.chars = is_top ? &win->body.chars[tidx] : &accel.chars[_stx];
@@ -1223,7 +1223,7 @@ static void __NEAR__ __FASTCALL__ updatewinmem(TWindow *win)
         inx = win->X1;
         iny = win->Y1+i;
         if(inx + lwidth > tvioWidth) lwidth = tvioWidth > inx ? tvioWidth - inx : 0;
-        if(iny <= tvioHeight && lwidth)
+        if(iny < tvioHeight && lwidth)
         {
           if(is_top)
           {

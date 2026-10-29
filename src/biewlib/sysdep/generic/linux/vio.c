@@ -536,6 +536,25 @@ void __FASTCALL__ __init_vio(const char *user_cp,unsigned long flags)
     initialized = 1;
 }
 
+void __FASTCALL__ __vioResize(unsigned w, unsigned h)
+{
+    unsigned char *nm;
+
+    if (!initialized) return;
+    if (w > VMAX_X) w = VMAX_X;
+    if (h > VMAX_Y) h = VMAX_Y;
+    if (!w) w = tvioWidth;
+    if (!h) h = tvioHeight;
+    if (w == (unsigned)tvioWidth && h == (unsigned)tvioHeight) return;
+
+    nm = realloc(viomem, (w * h) * 3);
+    if (!nm) return;
+    viomem = nm;
+    tvioWidth = w; tvioHeight = h;
+    violen = w * h;
+    memset(viomem, 0, violen * 3);
+}
+
 void __FASTCALL__ __term_vio(void)
 {
     if (!initialized) return;

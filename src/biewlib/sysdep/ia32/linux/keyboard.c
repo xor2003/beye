@@ -51,6 +51,7 @@ static int gpmhandle;
 #ifdef HAVE_NOTCURSES
 #include <notcurses/notcurses.h>
 extern struct notcurses *biew_nc;	/* created by __init_vio (non-console) */
+extern void __FASTCALL__ BiewScreenResize(void) __attribute__((weak));	/* biew.c: re-layout top-level windows; weak so -lbiew-only tools still link */
 #endif
 
 #ifdef HAVE_NCURSES
@@ -339,7 +340,17 @@ static int __NEAR__ map_nc_input(const ncinput *ni)
 {
     int k = 0;
     unsigned id = ni->id;
-    if (id >= NCKEY_F01 && id <= NCKEY_F12) k = KE_F(id - NCKEY_F00);
+    if (id >= NCKEY_F01 && id <= NCKEY_F60)
+    {
+	/* terminfo maps modified F-keys to F13+ (ncurses convention):
+	   +12 shift, +24 ctrl, +36 ctrl+shift, +48 alt */
+	unsigned n = id - NCKEY_F01;
+	unsigned f = (n % 12) + 1, grp = n / 12;
+	k = KE_F(f);
+	if (grp & 1) k |= ADD_SHIFT;
+	if (grp & 2) k |= ADD_CONTROL;
+	if (grp & 4) k |= ADD_ALT;
+    }
     else if (id < 0x80) k = (int)id;
     else switch (id)
     {
@@ -357,9 +368,16 @@ static int __NEAR__ map_nc_input(const ncinput *ni)
 	case NCKEY_BACKSPACE:	k = KE_BKSPACE; break;
 	case NCKEY_RESIZE:
 	    {
-		unsigned ny, nx;
-		notcurses_stddim_yx(biew_nc, &ny, &nx);
-		tvioWidth = nx; tvioHeight = ny;
+		struct winsize wsz;
+		/* stddim_yx may lag one event behind; kernel winsize is always current */
+		if (ioctl(in_fd, TIOCGWINSZ, &wsz) < 0 || !wsz.ws_col || !wsz.ws_row)
+		    return 0;
+		if ((unsigned)wsz.ws_col != (unsigned)tvioWidth ||
+		    (unsigned)wsz.ws_row != (unsigned)tvioHeight)
+		{
+		    __vioResize(wsz.ws_col, wsz.ws_row);
+		    if (BiewScreenResize) BiewScreenResize();
+		}
 	    }
 	    return 0;
     }
