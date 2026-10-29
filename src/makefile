@@ -304,6 +304,28 @@ biewlib/sysdep/$(MACHINE)/$(HOST)/os_dep.o:   biewlib/sysdep/$(MACHINE)/$(HOST)/
 biewlib/sysdep/$(MACHINE)/$(HOST)/timer.o:    biewlib/sysdep/$(MACHINE)/$(HOST)/timer.c
 biewlib/sysdep/$(MACHINE)/$(HOST)/vio.o:      biewlib/sysdep/$(MACHINE)/$(HOST)/vio.c
 
+# wrapper .c files #include the real sources; rebuild objects when those change
+ifeq ($(MACHINE),x86_64)
+biewlib/sysdep/x86_64/linux/fileio.o:   biewlib/sysdep/generic/linux/fileio.c
+biewlib/sysdep/x86_64/linux/keyboard.o: biewlib/sysdep/ia32/linux/keyboard.c
+biewlib/sysdep/x86_64/linux/mmfio.o:    biewlib/sysdep/generic/linux/mmfio.c
+biewlib/sysdep/x86_64/linux/mouse.o:    biewlib/sysdep/generic/linux/mouse.c
+biewlib/sysdep/x86_64/linux/misc.o:     biewlib/sysdep/ia32/linux/misc.c
+biewlib/sysdep/x86_64/linux/nls.o:      biewlib/sysdep/generic/linux/nls.c
+biewlib/sysdep/x86_64/linux/os_dep.o:   biewlib/sysdep/generic/linux/os_dep.c biewlib/sysdep/generic/unix/os_dep.c
+biewlib/sysdep/x86_64/linux/timer.o:    biewlib/sysdep/generic/posix/timer.c
+biewlib/sysdep/x86_64/linux/vio.o:      biewlib/sysdep/generic/linux/vio.c
+endif
+ifeq ($(MACHINE),ia32)
+biewlib/sysdep/ia32/linux/fileio.o:     biewlib/sysdep/generic/linux/fileio.c
+biewlib/sysdep/ia32/linux/mmfio.o:      biewlib/sysdep/generic/linux/mmfio.c
+biewlib/sysdep/ia32/linux/mouse.o:      biewlib/sysdep/generic/linux/mouse.c
+biewlib/sysdep/ia32/linux/nls.o:        biewlib/sysdep/generic/linux/nls.c
+biewlib/sysdep/ia32/linux/os_dep.o:     biewlib/sysdep/generic/linux/os_dep.c biewlib/sysdep/generic/unix/os_dep.c
+biewlib/sysdep/ia32/linux/timer.o:      biewlib/sysdep/generic/posix/timer.c
+biewlib/sysdep/ia32/linux/vio.o:        biewlib/sysdep/generic/linux/vio.c
+endif
+
 ifeq ($(HOST),qnx)
 biewlib/sysdep/ia32/qnx/cpu_info.o:           biewlib/sysdep/ia32/qnx/cpu_info.asm
 	cc -c $< -o $@

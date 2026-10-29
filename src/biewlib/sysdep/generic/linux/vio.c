@@ -269,6 +269,9 @@ void __FASTCALL__ __vioWriteBuff(tAbsCoord x, tAbsCoord y, const tvioBuff *buff,
     if (biew_nc) {
 	unsigned i;
 	for (i = 0; i < len; i++) {
+	    unsigned linear = x + i;
+	    unsigned cy = y + linear / tvioWidth;
+	    unsigned cx = linear % tvioWidth;
 	    unsigned char c  = buff->chars[i];
 	    unsigned char ca = buff->attrs[i];
 	    unsigned char cp = buff->oem_pg[i];
@@ -294,7 +297,7 @@ void __FASTCALL__ __vioWriteBuff(tAbsCoord x, tAbsCoord y, const tvioBuff *buff,
 	    ncplane_set_fg_palindex(nc_stdp, fg);
 	    if (nc_is_transp(_bg(ca))) ncplane_set_bg_palindex(nc_stdp, 0);
 	    else ncplane_set_bg_palindex(nc_stdp, bg);
-	    ncplane_putegc_yx(nc_stdp, y, x + i, egc, NULL);
+	    ncplane_putegc_yx(nc_stdp, cy, cx, egc, NULL);
 	}
 	notcurses_render(biew_nc);
     } else
