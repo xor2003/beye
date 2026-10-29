@@ -20,3 +20,4 @@ config.mak
 config.log
 compile_commands.json
 lint-*.txt
+HIEW_PARITY.md
