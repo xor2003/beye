@@ -970,12 +970,12 @@ int __FASTCALL__ disAppendDigits(char *str,__filesize_t ulShift,int flags,
         default:
         case DISARG_BYTE: _defval = *(tUInt8 *)defval;  fld_len=1; break;
         case DISARG_CHAR: _defval = *(tInt8 *)defval;   fld_len=1; break;
-        case DISARG_WORD: _defval = *(tUInt16 *)defval; fld_len=2; break;
-        case DISARG_SHORT:_defval = *(tInt16 *)defval;  fld_len=2; break;
-        case DISARG_DWORD:_defval = *(tUInt32 *)defval; fld_len=4; break;
-        case DISARG_LONG: _defval = *(tInt32 *)defval;  fld_len=4; break;
-        case DISARG_QWORD:_defval = *(tUInt64 *)defval; fld_len=8; break;
-        case DISARG_LLONG:_defval = *(tInt64 *)defval;  fld_len=8; break;
+        case DISARG_WORD: { tUInt16 _t; memcpy(&_t,defval,sizeof(_t)); _defval = _t; } fld_len=2; break;
+        case DISARG_SHORT:{ tInt16 _t;  memcpy(&_t,defval,sizeof(_t)); _defval = _t; } fld_len=2; break;
+        case DISARG_DWORD:{ tUInt32 _t; memcpy(&_t,defval,sizeof(_t)); _defval = _t; } fld_len=4; break;
+        case DISARG_LONG: { tInt32 _t;  memcpy(&_t,defval,sizeof(_t)); _defval = _t; } fld_len=4; break;
+        case DISARG_QWORD:{ tUInt64 _t; memcpy(&_t,defval,sizeof(_t)); _defval = _t; } fld_len=8; break;
+        case DISARG_LLONG:{ tInt64 _t;  memcpy(&_t,defval,sizeof(_t)); _defval = _t; } fld_len=8; break;
       }
       if(_defval)         /* Do not perform operation on NULL */
       {
@@ -1043,9 +1043,11 @@ int __FASTCALL__ disAppendDigits(char *str,__filesize_t ulShift,int flags,
      {
       case DISARG_LLONG:
 #ifdef INT64_C
-			 appstr = Get16SignDig(*(tInt64 *)defval);
+			 { tInt64 _t; memcpy(&_t,defval,sizeof(_t));
+			   appstr = Get16SignDig(_t); }
 #else
-			 appstr = Get16SignDig(((tInt32 *)defval)[0],((tInt32 *)defval)[1]);
+			 { tInt32 _t[2]; memcpy(_t,defval,sizeof(_t));
+			   appstr = Get16SignDig(_t[0],_t[1]); }
 #endif
                          if(type & DISARG_IMM &&
                             disNeedRef >= NEEDREF_PREDICT &&
@@ -1068,7 +1070,8 @@ int __FASTCALL__ disAppendDigits(char *str,__filesize_t ulShift,int flags,
                                             ,((unsigned char *)defval)[6]
                                             ,((unsigned char *)defval)[7]);
                          break;
-      case DISARG_LONG:  appstr = Get8SignDig(*(tInt32 *)defval);
+      case DISARG_LONG:  { tInt32 _t; memcpy(&_t,defval,sizeof(_t));
+			   appstr = Get8SignDig(_t); }
                          if(type & DISARG_IMM &&
                             disNeedRef >= NEEDREF_PREDICT &&
                             dis_severity < DISCOMSEV_STRING &&
@@ -1082,7 +1085,8 @@ int __FASTCALL__ disAppendDigits(char *str,__filesize_t ulShift,int flags,
                                             ,((unsigned char *)defval)[2]
                                             ,((unsigned char *)defval)[3]);
                          break;
-      case DISARG_SHORT: appstr = Get4SignDig(*(tInt16 *)defval);
+      case DISARG_SHORT: { tInt16 _t; memcpy(&_t,defval,sizeof(_t));
+			   appstr = Get4SignDig(_t); }
                          if(type & DISARG_IMM &&
                             disNeedRef >= NEEDREF_PREDICT &&
                             dis_severity < DISCOMSEV_STRING &&
@@ -1106,7 +1110,8 @@ int __FASTCALL__ disAppendDigits(char *str,__filesize_t ulShift,int flags,
                             isprint(*(unsigned char *)defval))
                             sprintf(comments,"'%c'",*(unsigned char *)defval);
                          break;
-      case DISARG_WORD:  appstr = Get4Digit(*(tUInt16 *)defval);
+      case DISARG_WORD:  { tUInt16 _t; memcpy(&_t,defval,sizeof(_t));
+			   appstr = Get4Digit(_t); }
                          if(type & DISARG_IMM &&
                             disNeedRef >= NEEDREF_PREDICT &&
                             dis_severity < DISCOMSEV_STRING &&
@@ -1117,7 +1122,8 @@ int __FASTCALL__ disAppendDigits(char *str,__filesize_t ulShift,int flags,
                                             ,((unsigned char *)defval)[1]);
                          break;
       default:
-      case DISARG_DWORD: appstr = Get8Digit(*(tUInt32 *)defval);
+      case DISARG_DWORD: { tUInt32 _t; memcpy(&_t,defval,sizeof(_t));
+			   appstr = Get8Digit(_t); }
                          if(type & DISARG_IMM &&
                             disNeedRef >= NEEDREF_PREDICT &&
                             dis_severity < DISCOMSEV_STRING &&
@@ -1133,9 +1139,11 @@ int __FASTCALL__ disAppendDigits(char *str,__filesize_t ulShift,int flags,
                          break;
       case DISARG_QWORD:
 #ifdef INT64_C
-			 appstr = Get16Digit(*(tUInt64 *)defval);
+			 { tUInt64 _t; memcpy(&_t,defval,sizeof(_t));
+			   appstr = Get16Digit(_t); }
 #else
-			 appstr = Get16Digit(((tUInt32 *)defval)[0],((tUInt32 *)defval)[1]);
+			 { tUInt32 _t[2]; memcpy(_t,defval,sizeof(_t));
+			   appstr = Get16Digit(_t[0],_t[1]); }
 #endif
                          if(type & DISARG_IMM &&
                             disNeedRef >= NEEDREF_PREDICT &&

@@ -1421,7 +1421,8 @@ static DisasmRet __FASTCALL__ ppcDisassembler(__filesize_t ulShift,
     memset(&dret,0,sizeof(DisasmRet));
     if(detectedFormat->query_bitness) ppcBitness = detectedFormat->query_bitness(ulShift);
     if(detectedFormat->query_endian) ppcBigEndian = detectedFormat->query_endian(ulShift)==DAE_BIG?1:0;
-    opcode=ppcBigEndian?be2me_32(*((tUInt32 *)buffer)):le2me_32(*((tUInt32 *)buffer));
+    memcpy(&opcode,buffer,sizeof(opcode));
+    opcode=ppcBigEndian?be2me_32(opcode):le2me_32(opcode);
     n = sizeof(ppc_table)/sizeof(ppc_opcode);
     done=0;
     dret.str = outstr;

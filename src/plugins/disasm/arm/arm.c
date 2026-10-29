@@ -48,13 +48,15 @@ static DisasmRet __FASTCALL__ armDisassembler(__filesize_t ulShift,
     if(armBitness==DAB_USE32)
     {
 	tUInt32 opcode32;
-	opcode32=armBigEndian?be2me_32(*((tUInt32 *)buffer)):le2me_32(*((tUInt32 *)buffer));
+	memcpy(&opcode32,buffer,sizeof(opcode32));
+	opcode32=armBigEndian?be2me_32(opcode32):le2me_32(opcode32);
 	arm32Disassembler(&ret,ulShift,opcode32,flags);
     }
     else
     {
 	tUInt16 opcode16;
-	opcode16=armBigEndian?be2me_16(*((tUInt16 *)buffer)):le2me_16(*((tUInt16 *)buffer));
+	memcpy(&opcode16,buffer,sizeof(opcode16));
+	opcode16=armBigEndian?be2me_16(opcode16):le2me_16(opcode16);
 	arm16Disassembler(&ret,ulShift,opcode16,flags);
     }
   }

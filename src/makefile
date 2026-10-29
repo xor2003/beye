@@ -23,11 +23,11 @@ include ./config.mak
 # Accepted values: anything gcc/clang's -fsanitize= takes.
 ifneq ($(strip $(SANITIZE)),)
 HOST_CFLAGS += -fsanitize=$(SANITIZE) -fno-omit-frame-pointer -g
-HOST_LDFLAGS += -fsanitize=$(SANITIZE)
+HOST_LDFLAGS += -fsanitize=$(SANITIZE) -g
 endif
 
 CFLAGS = $(CDEFOS) $(CDEFSYS) $(HOST_CFLAGS)
-LDFLAGS = $(OSLDEF) $(HOST_LDFLAGS)
+LDFLAGS = $(if $(SANITIZE),$(filter-out -s,$(OSLDEF)),$(OSLDEF)) $(HOST_LDFLAGS)
 
 ###########################################################################
 # TARGET: put name of executable image here                               #

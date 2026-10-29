@@ -92,14 +92,14 @@ void *           __FASTCALL__ PMalloc(size_t obj_size)
 {
   void *ret;
   unsigned i;
-  ret = malloc(obj_size);
+  ret = calloc(1,obj_size);
   if(!ret)
   {
     for(i = 0;i < lmcount;i++)
     {
       if(lmstack[i](obj_size))
       {
-        ret = malloc(obj_size);
+        ret = calloc(1,obj_size);
         if(ret) break;
       }
     }
