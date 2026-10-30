@@ -729,7 +729,7 @@ void __FASTCALL__ __init_keyboard(const char *user_cp)
 #ifdef	_VT100_
     struct termios tattr;
 
-#ifdef	__ENABLE_SIGIO
+#if defined(__ENABLE_SIGIO) && !defined(__COSMOPOLITAN__)
 #define _MODE_ O_NONBLOCK | O_ASYNC
 #else
 #define _MODE_ O_NONBLOCK
@@ -747,16 +747,30 @@ void __FASTCALL__ __init_keyboard(const char *user_cp)
     }
 #endif
 
+    {
+    int mode = _MODE_;
     in_fd = open(ttyname(STDIN_FILENO), O_RDONLY);
     if (in_fd < 0) in_fd = STDIN_FILENO;
 
-    if (fcntl(in_fd, F_SETFL, fcntl(in_fd, F_GETFL) | _MODE_) < 0)
+#if defined(__ENABLE_SIGIO) && !defined(__COSMOPOLITAN__)
+    /* the handler and our ownership of the fd must be in place before
+       O_ASYNC is armed: without F_SETOWN the tty signals the foreground
+       process group, which would kill any process sharing our group.
+       Cosmopolitan's F_SETOWN is a stub that never reaches the kernel,
+       so async mode is disabled there and input is polled instead */
+    signal(SIGIO, (void *)(int) ReadNextEvent);
+    if (fcntl(in_fd, F_SETOWN, getpid()) < 0)
+	mode = O_NONBLOCK; /* can't own the signal source: poll instead */
+#endif
+
+    if (fcntl(in_fd, F_SETFL, fcntl(in_fd, F_GETFL) | mode) < 0)
     {
 	    printm("Can't set %X for %d: %s\nExiting..\n",
-		_MODE_,
+		mode,
 		in_fd,
 		strerror(errno));
 	    exit(EXIT_FAILURE);
+    }
     }
 
     tcgetattr(in_fd, &tattr);
@@ -777,11 +791,6 @@ void __FASTCALL__ __init_keyboard(const char *user_cp)
 #endif
 
     keybuf.current = 0;
-
-#ifdef	__ENABLE_SIGIO
-    /* everything is ready, start to receive SIGIO */
-    signal(SIGIO, (void *)(int) ReadNextEvent);
-#endif
 
 #endif	/* _VT100_ */
 

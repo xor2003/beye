@@ -893,9 +893,9 @@ int __FASTCALL__ __kbdGetKey (unsigned long flg)
     while (!keybuf.current) {
 	__OsYield();
 	if (!on_console) { poll_x11_modifiers();
-#if defined(HAVE_NCURSES) || defined(HAVE_NOTCURSES)
-	    if (termlib_input()) ReadNextEvent();
-#endif
+	    /* non-blocking read — needed when SIGIO can't reach us
+	       (e.g. Cosmopolitan builds, where O_ASYNC stays off) */
+	    ReadNextEvent();
 	}
 #ifdef	HAVE_MOUSE
 	if (gpmhandle) ReadNextEvent();
@@ -952,16 +952,26 @@ dummy_handler (int sig)
 
 void __FASTCALL__ __init_keyboard(const char *user_cp)
 {
+    int mode = O_NONBLOCK;
+
     signal(SIGIO, dummy_handler);
     in_fd = open(ttyname(STDIN_FILENO), O_RDONLY);
     if (in_fd < 0) in_fd = STDIN_FILENO;
 
-#define _MODE_ O_NONBLOCK | O_ASYNC
+    /* O_ASYNC without F_SETOWN signals the tty's foreground process
+       group, killing any process that shares it (e.g. a parent that
+       spawned us); claim the fd first so SIGIO reaches only us.
+       Cosmopolitan's F_SETOWN is a userspace stub that never reaches
+       the kernel, so async input is disabled there and polled. */
+#ifndef	__COSMOPOLITAN__
+    if (fcntl(in_fd, F_SETOWN, getpid()) == 0)
+	mode |= O_ASYNC;
+#endif
 
-    if (fcntl(in_fd, F_SETFL, fcntl(in_fd, F_GETFL) | _MODE_) < 0)
+    if (fcntl(in_fd, F_SETFL, fcntl(in_fd, F_GETFL) | mode) < 0)
     {
         printm("Can't set %X for %d: %s\nExiting..\n",
-		_MODE_,
+		mode,
 		in_fd,
 		strerror(errno));
         exit(EXIT_FAILURE);
