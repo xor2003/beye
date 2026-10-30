@@ -6,12 +6,27 @@ History: SourceForge CVS (beye) imported to git — see commits back to 2001.
 
 ## Build
 
+Primary build: native gcc + notcurses (this is the default):
+
 ```sh
 cd src
 ./configure            # autodetects arch/os; writes config.mak
 make -j8
 ./biew <file>
 ```
+
+Install (user-local, no sudo — lands at `~/.local/bin/biew` on PATH):
+
+```sh
+make install PREFIX=$HOME/.local DATADIR=$HOME/.local/share/biew
+```
+
+Data files (hlp/skn/syntax/xlt) resolve via `~/.local/share/biew/` first —
+`__get_rc_dir` prefers `$XDG_DATA_HOME/biew` over the compiled-in
+`/usr/local/share/biew`.
+
+Optional secondary: Cosmopolitan APE `biew.com` (build tree `/tmp/bape2`,
+`x86_64-unknown-cosmo-cc` + `x86_64-linux-cosmo-objcopy -O binary`).
 
 Sanitizer build: `make clean && make SANITIZE=address,undefined`.
 Cross-compile/other archs: `./configure --target-arch=arm` etc.; archs

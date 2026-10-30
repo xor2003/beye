@@ -120,9 +120,25 @@ char * __FASTCALL__ __get_rc_dir(const char *progname)
 {
     if (_rc_dir_name[0]) return _rc_dir_name; //Already computed
 
-    strcpy(_rc_dir_name, DATADIR);
-    /*strcat(_rc_dir_name, progname);*/
-    return strcat(_rc_dir_name, "/");
+    /* per-user data dir ($XDG_DATA_HOME/<prog> or ~/.local/share/<prog>)
+       wins over the compiled-in system DATADIR when it exists */
+    {
+	const char *xdg = getenv("XDG_DATA_HOME");
+	const char *home = getenv("HOME");
+	struct stat st;
+	_rc_dir_name[0] = '\0';
+	if (xdg && *xdg)
+	    snprintf(_rc_dir_name, sizeof _rc_dir_name, "%s/%s/", xdg, progname);
+	else if (home && *home)
+	    snprintf(_rc_dir_name, sizeof _rc_dir_name,
+		     "%s/.local/share/%s/", home, progname);
+	if (!_rc_dir_name[0] || stat(_rc_dir_name, &st) < 0 || !S_ISDIR(st.st_mode))
+	{
+	    strcpy(_rc_dir_name, DATADIR);
+	    strcat(_rc_dir_name, "/");
+	}
+    }
+    return _rc_dir_name;
 }
 
 
