@@ -36,33 +36,33 @@
 ; Below placed colors of windows and window elements of BIEW.
 ; Color gives as pair - background:foreground.
 [ Browser ] ; Main window of BIEW
-  Main         = Blue:LightCyan
-  Bound        = Blue:Yellow      ; bound color (symbols: '<' '>' if text is outside the window)
-  HighLight    = LightGray:Black  ; color of hihglighting search
+  Main         = Blue:LightGray
+  Bound        = Blue:LightCyan   ; bound color (symbols: '<' '>' if text is outside the window)
+  HighLight    = Cyan:Black       ; color of hihglighting search
   HighLightLine= Blue:White       ; color of line, where placed found sequence
-  Title        = Cyan:Blue        ; for future
-  Footer       = Green:Blue       ; for future
+  Title        = LightGray:Black  ; for future
+  Footer       = Blue:LightGray   ; for future
   Scroller     = Blue:Yellow      ; for future
   < Edit >
     Main         = Blue:White     ; multiline editor
     Change       = Blue:LightRed  ; when undo buffer is not same with editor
-    Selected     = LightGray:Blue ; for future: when buffer is selected
+    Selected     = Cyan:Black     ; for future: when buffer is selected
 [ Prompt ] ; Lower string of BIEW
-  Button       = Cyan:Black       ; Color of buttons
-  Digit        = Black:LightCyan  ; Color of digits
-  Control      = Black:LightGray  ; Lower left corner of screen
+  Button       = LightGray:Black  ; Color of buttons
+  Digit        = LightGray:Blue   ; Color of digits
+  Control      = LightGray:Black  ; Lower left corner of screen
 [ Title ]  ; Upper string of BIEW
-  Main         = Cyan:Black
-  Change       = Cyan:Red
+  Main         = LightGray:Black
+  Change       = LightGray:Red
 [ Text ]   ; HighLight text support (still for textmode)
-  Normal       = Blue:LightCyan
+  Normal       = Blue:LightGray
   Bold         = Blue:White
   Italic       = Blue:LightGreen
   Underline    = Blue:Yellow
   StrikeThrough= Blue:LightBlue
 [ Disasm ] ; HighLight disassembler support
-  FamilyId     = Blue:LightBlue
-  Opcodes      = Blue:LightCyan
+  FamilyId     = Blue:LightGray
+  Opcodes      = Blue:White
   Opcodes0     = Blue:White
   Opcodes1     = Blue:LightGreen
   Opcodes2     = Blue:LightRed
@@ -71,7 +71,7 @@
   Opcodes5     = Blue:LightBlue
   Comments     = Blue:Yellow
  < Processor0 > ; Main processor (or Central Processor Unit)
-    Clone1       = Blue:LightCyan
+    Clone1       = Blue:White
     Clone2       = Blue:LightGray
     Clone3       = Blue:Yellow
     Clone4       = Blue:LightGreen
@@ -139,7 +139,7 @@
     Clone15      = Blue:Black
     Clone16      = Blue:Black
  < Engine >
-    Engine0      = Blue:LightCyan
+    Engine0      = Blue:White
     Engine0_unopt= Blue:LightGray
     Engine1      = Blue:Cyan
     Engine1_unopt= Blue:Gray

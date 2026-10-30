@@ -263,29 +263,29 @@ tBool csetReadIniFile(const char *ini_name)
 
 BrowserCSet browser_cset =
 {
+  LOGFB_TO_PHYS(LightGray, Blue),
   LOGFB_TO_PHYS(LightCyan, Blue),
-  LOGFB_TO_PHYS(Yellow, Blue),
-  LOGFB_TO_PHYS(Black, LightGray),
+  LOGFB_TO_PHYS(Black, Cyan),
   LOGFB_TO_PHYS(White, Blue),
-  LOGFB_TO_PHYS(Blue, Cyan),
-  LOGFB_TO_PHYS(Blue, Green),
+  LOGFB_TO_PHYS(Black, LightGray),
+  LOGFB_TO_PHYS(LightGray, Blue),
   LOGFB_TO_PHYS(Yellow, Blue),
   { LOGFB_TO_PHYS(White, Blue),
     LOGFB_TO_PHYS(LightRed, Blue),
-    LOGFB_TO_PHYS(Blue, LightGray) }
+    LOGFB_TO_PHYS(Black, Cyan) }
 };
 
 PromptCSet prompt_cset =
 {
-  LOGFB_TO_PHYS(Black, Cyan),
-  LOGFB_TO_PHYS(LightCyan, Black),
-  LOGFB_TO_PHYS(LightGray, Black),
+  LOGFB_TO_PHYS(Black, LightGray),
+  LOGFB_TO_PHYS(Blue, LightGray),
+  LOGFB_TO_PHYS(Black, LightGray),
 };
 
 TitleCSet title_cset =
 {
-  LOGFB_TO_PHYS(Black, Cyan),
-  LOGFB_TO_PHYS(Red, Cyan)
+  LOGFB_TO_PHYS(Black, LightGray),
+  LOGFB_TO_PHYS(Red, LightGray)
 };
 
 MessageCSet error_cset =
@@ -317,7 +317,7 @@ MessageCSet warn_cset =
 
 TextCSet text_cset =
 {
-  LOGFB_TO_PHYS(LightCyan, Blue),
+  LOGFB_TO_PHYS(LightGray, Blue),
   LOGFB_TO_PHYS(White, Blue),
   LOGFB_TO_PHYS(LightGreen, Blue),
   LOGFB_TO_PHYS(Yellow, Blue),
@@ -326,8 +326,8 @@ TextCSet text_cset =
 
 DisasmCSet disasm_cset =
 {
-  LOGFB_TO_PHYS(LightBlue, Blue),
-  LOGFB_TO_PHYS(LightCyan, Blue),
+  LOGFB_TO_PHYS(LightGray, Blue),
+  LOGFB_TO_PHYS(White, Blue),
   LOGFB_TO_PHYS(White, Blue),
   LOGFB_TO_PHYS(LightGreen, Blue),
   LOGFB_TO_PHYS(LightRed, Blue),
@@ -338,7 +338,7 @@ DisasmCSet disasm_cset =
   {
    {
     {
-     LOGFB_TO_PHYS(LightCyan, Blue),
+     LOGFB_TO_PHYS(White, Blue),
      LOGFB_TO_PHYS(LightGray, Blue),
      LOGFB_TO_PHYS(Yellow, Blue),
      LOGFB_TO_PHYS(LightGreen, Blue),
@@ -418,7 +418,7 @@ DisasmCSet disasm_cset =
    }
   },
   {
-    { LOGFB_TO_PHYS(LightCyan, Blue), LOGFB_TO_PHYS(LightGray, Blue) },
+    { LOGFB_TO_PHYS(White, Blue), LOGFB_TO_PHYS(LightGray, Blue) },
     { LOGFB_TO_PHYS(Cyan, Blue), LOGFB_TO_PHYS(Gray, Blue) },
     { LOGFB_TO_PHYS(LightBlue, Blue), LOGFB_TO_PHYS(Black, Blue) },
     { LOGFB_TO_PHYS(White, Blue), LOGFB_TO_PHYS(Yellow, Blue) },
