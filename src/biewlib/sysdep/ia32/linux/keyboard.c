@@ -61,8 +61,9 @@ static FILE *nc_devnull = NULL;
 #endif
 
 /* true when a terminal library (ncurses or notcurses) owns input
-   decoding on this terminal */
-static int __NEAR__ termlib_input(void)
+   decoding on this terminal; in that case SIGIO does not pump and
+   waiters like __inputRawInfo must drive ReadNextEvent themselves */
+int __NEAR__ termlib_input(void)
 {
 #ifdef HAVE_NOTCURSES
     if (biew_nc) return 1;

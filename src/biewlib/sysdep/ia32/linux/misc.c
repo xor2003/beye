@@ -19,6 +19,8 @@ extern int  rawkb_escape;
 extern unsigned rawkb_len;
 extern unsigned rawkb_mode;
 extern int on_console;
+extern void __FASTCALL__ ReadNextEvent(void);
+extern int  __NEAR__ termlib_input(void);
 
 int __FASTCALL__ __inputRawInfo(char *head, char *text)
 {
@@ -30,7 +32,9 @@ int __FASTCALL__ __inputRawInfo(char *head, char *text)
     rawkb_escape=0;
     rawkb_len=0;
     rawkb_mode=1;
-    while(rawkb_mode) usleep(0);
+    /* SIGIO only pumps ReadNextEvent for the hand parser; under
+       ncurses/notcurses input is drained by whoever waits on it */
+    while(rawkb_mode) { usleep(0); if(termlib_input()) ReadNextEvent(); }
     for(i=0;i<rawkb_len;i++)
     {
 	if(isprint(rawkb_buf[i])) { appends[0]=rawkb_buf[i]; appends[1]=0; }
