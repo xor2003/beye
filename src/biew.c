@@ -106,6 +106,7 @@ extern REGISTRY_BIN sisxTable;
 extern REGISTRY_BIN lmfTable;
 extern REGISTRY_BIN mzTable;
 extern REGISTRY_BIN dossysTable;
+extern REGISTRY_BIN comTable;
 
 static REGISTRY_BIN *mainBinTable[] =
 {
@@ -137,6 +138,7 @@ static REGISTRY_BIN *mainBinTable[] =
   &movTable,
   &rmTable,
   &mp3Table,
+  &comTable,
   &binTable
 };
 

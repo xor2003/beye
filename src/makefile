@@ -76,6 +76,7 @@ plugins/bin/bin.o\
 plugins/bin/bmp.o\
 plugins/bin/coff386.o\
 plugins/bin/dos_sys.o\
+plugins/bin/dos_com.o\
 plugins/bin/elf386.o\
 plugins/bin/jpeg.o\
 plugins/bin/jvmclass.o\
@@ -252,6 +253,7 @@ plugins/bin/bin.o:            plugins/bin/bin.c
 plugins/bin/bmp.o:            plugins/bin/bmp.c
 plugins/bin/coff386.o:        plugins/bin/coff386.c
 plugins/bin/dos_sys.o:        plugins/bin/dos_sys.c
+plugins/bin/dos_com.o:        plugins/bin/dos_com.c
 plugins/bin/elf386.o:         plugins/bin/elf386.c
 plugins/bin/jpeg.o:           plugins/bin/jpeg.c
 plugins/bin/jvmclass.o:       plugins/bin/jvmclass.c
