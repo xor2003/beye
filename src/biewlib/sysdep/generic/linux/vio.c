@@ -42,7 +42,10 @@ static const char rcs_id[] = "$Id: vio.c,v 1.18 2009/09/03 16:57:40 nickols_k Ex
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/ioctl.h>
+#if defined(__linux__) && !defined(__COSMOPOLITAN__)
 #include <sys/vt.h>
+#define HAVE_SYS_VT_H 1
+#endif
 #include "biewlib/biewlib.h"
 #include "console.h"
 
@@ -405,7 +408,9 @@ void __FASTCALL__ __vioWriteBuff(tAbsCoord x, tAbsCoord y, const tvioBuff *buff,
 
 void __FASTCALL__ __init_vio(const char *user_cp,unsigned long flags)
 {
+#ifdef HAVE_SYS_VT_H
     struct vt_mode vtmode;
+#endif
     char *tty = ttyname(STDOUT_FILENO);
 
     console_flags = flags;
@@ -413,8 +418,10 @@ void __FASTCALL__ __init_vio(const char *user_cp,unsigned long flags)
     out_fd = open(tty, O_WRONLY);
     if (out_fd < 0) out_fd = STDOUT_FILENO;
 
+#ifdef HAVE_SYS_VT_H
     if (TESTFLAG(console_flags, __TVIO_FLG_DIRECT_CONSOLE_ACCESS))
 	on_console = ioctl(out_fd, VT_GETMODE, &vtmode) >= 0;
+#endif
 
     if (on_console) {
 	char vcsa_name[0x10];

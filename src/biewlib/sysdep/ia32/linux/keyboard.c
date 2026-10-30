@@ -36,8 +36,26 @@ static const char rcs_id[] = "$Id: keyboard.c,v 1.14 2009/09/24 09:12:13 nickols
 #include <termios.h>
 #include <sys/time.h>
 #include <sys/ioctl.h>
+#if !defined(__COSMOPOLITAN__)
 #include <sys/kd.h>
 #include <sys/vt.h>
+#else
+/* Cosmopolitan has no Linux-console headers; on_console is always 0 there,
+   so these ioctls are dead code. */
+#define K_XLATE		0
+#define K_RAW		0
+#define KDSKBMODE	0
+#define VT_GETMODE	0
+#define VT_SETMODE	0
+#define VT_GETSTATE	0
+#define VT_ACTIVATE	0
+#define VT_RELDISP	0
+#define VT_ACKACQ	0
+#define VT_PROCESS	0
+#define TCSETSW		TCSETS
+struct vt_mode { char mode, waitv; short relsig, acqsig, frsig; };
+struct vt_stat { unsigned short v_active, v_signal, v_state; };
+#endif
 
 #include "biewlib/kbd_code.h"
 #include "biewlib/biewlib.h"
@@ -327,7 +345,7 @@ static void __FASTCALL__ console_enter(void)
 {
     ioctl(in_fd, KDSKBMODE, K_RAW);
     ioctl(in_fd, TCSETSW, &tattr);
-    memset(&keypressed, 0, KEYNUM * sizeof(int));
+    memset((void *)&keypressed, 0, KEYNUM * sizeof(int));
     console_restart = 1;
     signal(SIGUSR2, (void *) console_enter);
 }
