@@ -672,6 +672,52 @@ int main( int argc, char *argv[] )
  return retval;
 }
 
+static tBool __FASTCALL__ openListFile( unsigned i )
+{
+  tBool ret;
+  if(iniPreserveTime && ftim_ok) __OsSetFTime(ArgVector[1],&ftim);
+  BMClose();
+  ftim_ok = __OsGetFTime(ListFile[i],&ftim);
+  if(BMOpen(ListFile[i]) == 0)
+  {
+    ArgVector[1] = ListFile[i];
+    if(detectedFormat->destroy) detectedFormat->destroy();
+    if(activeMode->term) activeMode->term();
+    MakeShortName();
+    __detectBinFmt();
+    if(activeMode->init) activeMode->init();
+    ret = True;
+  }
+  else
+  {
+     if(BMOpen(ArgVector[1]) != 0)
+     {
+       exit(EXIT_FAILURE);
+     }
+     if(detectedFormat->destroy) detectedFormat->destroy();
+     if(activeMode->term) activeMode->term();
+     MakeShortName();
+     __detectBinFmt();
+     if(activeMode->init) activeMode->init();
+     ret = False;
+  }
+  return ret;
+}
+
+/** Switches to previous/next file in the command line list (Hiew Ctrl-F11/F12) **/
+tBool __FASTCALL__ FileSwitch( int dir )
+{
+  unsigned i, cur = 0;
+  if(ListFileCount < 2) return False;
+  for(i = 0;i < ListFileCount;i++)
+    if(ListFile[i] == ArgVector[1] || !strcmp(ListFile[i],ArgVector[1]))
+    {
+      cur = i;
+      break;
+    }
+  return openListFile((cur + ListFileCount + dir) % ListFileCount);
+}
+
 tBool NewSource( void )
 {
   int i;
@@ -700,35 +746,7 @@ tBool NewSource( void )
   ret = 0;
   for(freq = 0;freq < j;freq++) PFree(nlsListFile[freq]);
   PFree(nlsListFile);
-  if(i != -1)
-  {
-    if(iniPreserveTime && ftim_ok) __OsSetFTime(ArgVector[1],&ftim);
-    BMClose();
-    ftim_ok = __OsGetFTime(ListFile[i],&ftim);
-    if(BMOpen(ListFile[i]) == 0)
-    {
-      ArgVector[1] = ListFile[i];
-      if(detectedFormat->destroy) detectedFormat->destroy();
-      if(activeMode->term) activeMode->term();
-      MakeShortName();
-      __detectBinFmt();
-      if(activeMode->init) activeMode->init();
-      ret = True;
-    }
-    else
-    {
-       if(BMOpen(ArgVector[1]) != 0)
-       {
-         exit(EXIT_FAILURE);
-       }
-       if(detectedFormat->destroy) detectedFormat->destroy();
-       if(activeMode->term) activeMode->term();
-       MakeShortName();
-       __detectBinFmt();
-       if(activeMode->init) activeMode->init();
-       ret = False;
-    }
-  }
+  if(i != -1) ret = openListFile(i);
   return ret;
 }
 

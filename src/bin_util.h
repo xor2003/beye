@@ -90,6 +90,9 @@ extern tBool __FASTCALL__ udnSelectName(__filesize_t *off);
 **/
 extern tBool __FASTCALL__ udnUserNames( void );
 
+/** Names current file offset (Hiew Shift-F12 "name a location") **/
+extern tBool __FASTCALL__ udnAddName( void );
+
 extern void __FASTCALL__ udnInit( hIniProfile *ini );
 extern void __FASTCALL__ udnTerm( hIniProfile *ini );
 #ifdef __cplusplus

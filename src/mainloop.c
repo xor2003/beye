@@ -21,6 +21,7 @@
 #include "tstrings.h"
 #include "reg_form.h"
 #include "biewutil.h"
+#include "bin_util.h"
 #include "biewhelp.h"
 #include "bconsole.h"
 #include "codeguid.h"
@@ -234,7 +235,15 @@ void MainLoop( void )
     case KE_F(1) : if(iniUseHiewKeys) { activeMode->help(); break; }
                   About();  continue;
     default : continue;
-    case KE_SHIFT_F(1): if(iniUseHiewKeys) { About(); break; }
+    case KE_SHIFT_F(1): if(iniUseHiewKeys)
+                       {
+                          if((activeMode->flags & __MF_DISASM) && activeMode->action[1])
+                          {
+                             if(activeMode->action[1]()) { ch = KE_SUPERKEY; drawPrompt(); }
+                          }
+                          else About();
+                          break;
+                       }
                   activeMode->help();
                   break;
     case KE_F(10):
@@ -356,6 +365,18 @@ void MainLoop( void )
                       PaintTitle();
                    }
                    break;
+    case KE_SHIFT_F(12): if(iniUseHiewKeys) udnAddName();
+                   break;
+    case KE_CTL_F(11):
+    case KE_CTL_F(12):
+                       if(iniUseHiewKeys &&
+                          FileSwitch(ch == KE_CTL_F(11) ? -1 : 1))
+                       {
+                          FoundTextSt = FoundTextEnd; ch = KE_SUPERKEY;
+                          PaintTitle();
+                       }
+                       break;
+    case KE_CTL_ENTER: nfp = Search(True); ch = KE_JUSTFIND; break;
     case KE_HOME: textshift = 0; break;
     case KE_END:  textshift = strmaxlen - tvioWidth/2; break;
     case KE_UPARROW:

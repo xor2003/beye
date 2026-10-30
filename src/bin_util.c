@@ -391,6 +391,8 @@ static udnFunc udn_funcs[] =
     udnSaveList
 };
 
+tBool __FASTCALL__ udnAddName( void ) { return udnAddItem(); }
+
 tBool __FASTCALL__ udnUserNames( void ) {
   unsigned nModes;
   int i;

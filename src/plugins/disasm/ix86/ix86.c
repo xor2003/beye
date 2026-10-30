@@ -5785,8 +5785,8 @@ REGISTRY_DISASM ix86_Disasm =
 {
   DISASM_CPU_IX86,
   "Intel ~ix86 / x86_64",
-  { "x86Hlp", "Bitnes", NULL, NULL },
-  { x86AsmRef, x86Select_Bitness, NULL, NULL },
+  { "Bitnes", "x86Hlp", NULL, NULL },
+  { x86Select_Bitness, x86AsmRef, NULL, NULL },
   ix86Disassembler,
   ix86Asm,
   ix86HelpAsm,

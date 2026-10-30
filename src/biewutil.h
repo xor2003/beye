@@ -58,6 +58,7 @@ extern tBool              isValidIniArgs( void );
 
 extern tBool              NewSource( void );
 extern tBool              FileUtils( void );
+extern tBool __FASTCALL__ FileSwitch( int dir );
 extern __filesize_t       IsNewExe(void);
 
 extern char * __FASTCALL__ Get2Digit(tUInt8);
