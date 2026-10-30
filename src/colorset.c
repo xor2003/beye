@@ -278,8 +278,8 @@ BrowserCSet browser_cset =
 PromptCSet prompt_cset =
 {
   LOGFB_TO_PHYS(Black, LightGray),
-  LOGFB_TO_PHYS(Blue, LightGray),
-  LOGFB_TO_PHYS(Black, LightGray),
+  LOGFB_TO_PHYS(White, Black),
+  LOGFB_TO_PHYS(LightGray, Black),
 };
 
 TitleCSet title_cset =

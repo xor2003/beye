@@ -465,6 +465,7 @@ void __FASTCALL__ ReadNextEvent(void)
 
 	unsigned key = 0;
 	int i;
+	int alt_prefix = 0;
 
 #ifdef HAVE_MOUSE
     if (gpmhandle) {
@@ -679,8 +680,20 @@ void __FASTCALL__ ReadNextEvent(void)
 		rawkb_len=i;
 	    }
 	    if (i < 3) {
-		key = c[0];
+		/* ESC + printable char is the terminal's Meta/Alt prefix
+		   (Alt-g arrives as ESC 'g'); a lone ESC stays a lone ESC */
+		if (i == 2 && c[1] > ' ') key = c[1] | ADD_ALT;
+		else key = c[0];
 		goto place_key;
+	    }
+
+	    /* Meta/Alt prefix on a full sequence (Alt-F1 arrives as
+	       ESC ESC O P or ESC ESC [ 11 ~): unwrap and tag it */
+	    if (c[1] == KE_ESCAPE)
+	    {
+		memmove(&c[1], &c[2], i - 2);
+		i--;
+		alt_prefix = 1;
 	    }
 
     if (c[1] == '[' && c[2] == 'M' && i == 6) {
@@ -709,7 +722,7 @@ void __FASTCALL__ ReadNextEvent(void)
        where mod: 2=Shift 3=Alt 4=Shift+Alt 5=Ctrl 6=Shift+Ctrl
                   7=Alt+Ctrl 8=Shift+Alt+Ctrl
     */
-    if (!key && c[1] == '[')
+    if (!key && (c[1] == '[' || c[1] == 'O'))
     {
 	int j;
 	for (j = 2; j < i && c[j] != ';'; j++) ;
@@ -769,6 +782,27 @@ void __FASTCALL__ ReadNextEvent(void)
 		}
 	    }
 	}
+	else if (c[1] == 'O' && i == 4 && c[2] >= '2' && c[2] <= '8')
+	{
+	    /* SS3-with-modifier: ESC O <mod> P/Q/R/S (some terminals
+	       send Ctrl-F1 as ESC O 5 P rather than ESC [ 1 ; 5 P) */
+	    int mod = c[2] - '0' - 1;
+	    int base = 0;
+	    switch (c[3])
+	    {
+		case 'P': base = KE_F(1); break;
+		case 'Q': base = KE_F(2); break;
+		case 'R': base = KE_F(3); break;
+		case 'S': base = KE_F(4); break;
+	    }
+	    if (base)
+	    {
+		key = base;
+		if (mod & 1) key |= ADD_SHIFT;
+		if (mod & 2) key |= ADD_ALT;
+		if (mod & 4) key |= ADD_CONTROL;
+	    }
+	}
     }
 
 #define S S[i]
@@ -790,6 +824,7 @@ void __FASTCALL__ ReadNextEvent(void)
 #undef S
 	}
 c_end:
+	if (alt_prefix && key) key |= ADD_ALT;
 place_key:
 	if(!rawkb_mode) { ret(key); }
 	else { rawkb_escape=(key==KE_ESCAPE&&rawkb_len==1); rawkb_mode=0; }

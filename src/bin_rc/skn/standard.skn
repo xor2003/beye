@@ -49,8 +49,8 @@
     Selected     = Cyan:Black     ; for future: when buffer is selected
 [ Prompt ] ; Lower string of BIEW
   Button       = LightGray:Black  ; Color of buttons
-  Digit        = LightGray:Blue   ; Color of digits
-  Control      = LightGray:Black  ; Lower left corner of screen
+  Digit        = Black:White      ; Color of digits
+  Control      = Black:LightGray  ; Lower left corner of screen
 [ Title ]  ; Upper string of BIEW
   Main         = LightGray:Black
   Change       = LightGray:Red
