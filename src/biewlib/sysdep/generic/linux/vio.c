@@ -112,10 +112,11 @@ static const char *nc_ps437[0x30] = {
 };
 
 /* VGA palette (DOS attrs -> real colors). Palette indices are unusable:
-   on terminfos without setaf>7 entries notcurses emits invalid SGR codes. */
+   on terminfos without setaf>7 entries notcurses emits invalid SGR codes.
+   Blue is darker than stock VGA — terminals render 0xaa too brightly. */
 static const struct { unsigned char r, g, b; } nc_vga[16] = {
     {0x00,0x00,0x00},{0xaa,0x00,0x00},{0x00,0xaa,0x00},{0xaa,0x55,0x00},
-    {0x00,0x00,0xaa},{0xaa,0x00,0xaa},{0x00,0xaa,0xaa},{0xaa,0xaa,0xaa},
+    {0x00,0x00,0x87},{0xaa,0x00,0xaa},{0x00,0xaa,0xaa},{0xaa,0xaa,0xaa},
     {0x55,0x55,0x55},{0x55,0x55,0xff},{0x55,0xff,0x55},{0x55,0xff,0xff},
     {0xff,0x55,0x55},{0xff,0x55,0xff},{0xff,0xff,0x55},{0xff,0xff,0xff}
 };
@@ -167,6 +168,7 @@ static char *__FASTCALL__ _2ansi(unsigned char attr)
 {
     int bg = _bg(attr);
     int bc = _2color(bg);
+    char bgb[12];
 
     if (transparent) {
 	int i;
@@ -174,11 +176,17 @@ static char *__FASTCALL__ _2ansi(unsigned char attr)
 	    if (bg == tp.color[i]) bc = 9;
     }
 
+    /* terminals render ANSI blue4 far brighter than DOS VGA blue;
+       a 256-color navy is much closer (bg==1 only, not bright bg) */
+    if (bc == 9) strcpy(bgb, "49");
+    else if (bg == 1) strcpy(bgb, "48;5;18");
+    else	 sprintf(bgb, "4%d", bc);
+
     sprintf(vtmp,
-	"\033[%d;3%d;4%d%sm",
+	"\033[%d;3%d;%s%sm",
 	_fg(attr) > 7,
 	_2color(_fg(attr) & 7),
-	bc,
+	bgb,
 	bg > 7 ? ";5" : ""
     );
     return vtmp;

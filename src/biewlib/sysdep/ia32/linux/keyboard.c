@@ -25,7 +25,6 @@
 static const char rcs_id[] = "$Id: keyboard.c,v 1.14 2009/09/24 09:12:13 nickols_k Exp $";
 #endif
 
-#include <dlfcn.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <signal.h>
@@ -36,6 +35,9 @@ static const char rcs_id[] = "$Id: keyboard.c,v 1.14 2009/09/24 09:12:13 nickols
 #include <termios.h>
 #include <sys/time.h>
 #include <sys/ioctl.h>
+#include <sys/socket.h>
+#include <sys/poll.h>
+#include <sys/un.h>
 #if !defined(__COSMOPOLITAN__)
 #include <sys/kd.h>
 #include <sys/vt.h>
@@ -570,6 +572,19 @@ void __FASTCALL__ ReadNextEvent(void)
 		while (notcurses_get_nblock(biew_nc, &ni))
 		{
 		    int kc;
+		    switch (ni.id)	/* kitty kbd: bare modifier events */
+		    {
+		    case NCKEY_LSHIFT: case NCKEY_RSHIFT: kc = KS_SHIFT; break;
+		    case NCKEY_LCTRL:  case NCKEY_RCTRL:  kc = KS_CTRL;  break;
+		    case NCKEY_LALT:   case NCKEY_RALT:   kc = KS_ALT;   break;
+		    default: kc = 0;
+		    }
+		    if (kc)
+		    {
+			if (ni.evtype == NCTYPE_RELEASE) shift_status &= ~kc;
+			else			   shift_status |= kc;
+			ret(KE_SHIFTKEYS);
+		    }
 		    if (ni.evtype == NCTYPE_RELEASE) continue;
 		    if (ni.id >= NCKEY_BUTTON1 && ni.id <= NCKEY_BUTTON3)
 		    {
@@ -856,66 +871,210 @@ int __FASTCALL__ __kbdTestKey(unsigned long flg)
 /*
    When not on a Linux console (xterm/Konsole/ssh) the terminal protocol
    never reports bare Shift/Ctrl/Alt presses, so the prompt bar cannot
-   track modifier rows. If DISPLAY is set we can ask the X server for
-   the physical modifier mask directly via XQueryPointer. libX11 is
-   dlopen'd so there is no hard link dependency; on Wayland XWayland
-   reports the same state.
+   track modifier rows. If DISPLAY is set we ask the X server for the
+   physical key state directly: the protocol is spoken over
+   /tmp/.X11-unix/X<d> without libX11 — dlopen is unavailable under
+   Cosmopolitan, and a 4-byte QueryKeymap request whose reply carries
+   the down-map of all 256 keycodes is all we need.
 */
-static void __NEAR__ poll_x11_modifiers(void)
+
+#define X_OP_QUERYKEYMAP	44
+
+static int __NEAR__ x11_get_cookie(unsigned char *out, int cap, int disp)
 {
-    static int x11_state = 0; /* 0=untried 1=up -1=unavailable */
-    static void *x11_dpy = NULL;
-    static int (*x11_qp)(void *,unsigned long,void *,void *,
-			 int *,int *,int *,int *,unsigned int *) = NULL;
-    static unsigned long (*x11_root)(void *,int) = NULL;
-    static int (*x11_scr)(void *) = NULL;
-    static long x11_ms = 0;
-    if (x11_state == 0)
+    /* ~/.Xauthority entries: u16be family, u16be len+addr, u16be len+num,
+       u16be len+name, u16be len+data, repeated */
+    const char *xa = getenv("XAUTHORITY");
+    char path[1024];
+    unsigned char buf[4096];
+    int fd, n, i = 0;
+    if (!xa || !*xa)
     {
-	x11_state = -1;
-	if (getenv("DISPLAY"))
+	const char *home = getenv("HOME");
+	if (!home) return 0;
+	snprintf(path, sizeof path, "%s/.Xauthority", home);
+	xa = path;
+    }
+    fd = open(xa, O_RDONLY);
+    if (fd < 0) return 0;
+    n = (int)read(fd, buf, sizeof buf);
+    close(fd);
+    while (i + 10 <= n)
+    {
+	int alen = (buf[i+2]<<8)|buf[i+3];
+	int nlen, nmlen, dlen;
+	i += 4 + alen;
+	if (i + 2 > n) break;
+	nlen = (buf[i]<<8)|buf[i+1];
+	if (i + 2 + nlen + 2 > n) break;
 	{
-	    void *h = dlopen("libX11.so.6",RTLD_LAZY|RTLD_LOCAL);
-	    void *(*xop)(const char *);
-	    if (!h) h = dlopen("libX11.so",RTLD_LAZY|RTLD_LOCAL);
-	    if (h &&
-		(xop = (void *(*)(const char *))dlsym(h,"XOpenDisplay")) &&
-		(x11_qp = (int (*)(void *,unsigned long,void *,void *,
-				   int *,int *,int *,int *,
-				   unsigned int *))dlsym(h,"XQueryPointer")) &&
-		(x11_root = (unsigned long (*)(void *,int))dlsym(h,"XRootWindow")) &&
-		(x11_scr = (int (*)(void *))dlsym(h,"XDefaultScreen")) &&
-		(x11_dpy = xop(NULL)))
-		x11_state = 1;
+	    int dn = 0, j;
+	    for (j = 0; j < nlen; j++)
+		dn = dn * 10 + (buf[i+2+j] - '0');
+	    i += 2 + nlen;
+	    nmlen = (buf[i]<<8)|buf[i+1];
+	    if (i + 2 + nmlen + 2 > n) break;
+	    if (nmlen == 18 && dn == disp &&
+		memcmp(&buf[i+2], "MIT-MAGIC-COOKIE-1", 18) == 0)
+	    {
+		i += 2 + nmlen;
+		dlen = (buf[i]<<8)|buf[i+1];
+		if (i + 2 + dlen > n) break;
+		if (dlen > cap) dlen = cap;
+		memcpy(out, &buf[i+2], dlen);
+		return dlen;
+	    }
+	    i += 2 + nmlen;
+	    dlen = (buf[i]<<8)|buf[i+1];
+	    i += 2 + dlen;
 	}
     }
-    if (x11_state == 1)
+    return 0;
+}
+
+static int __NEAR__ x11_rd(int fd, unsigned char *buf, int len)
+{
+    int got = 0;
+    while (got < len)
     {
-	struct timeval tv;
-	long now;
-	gettimeofday(&tv,NULL);
-	now = tv.tv_sec * 1000 + tv.tv_usec / 1000;
-	if (now - x11_ms >= 50)
+	struct pollfd pfd;
+	int n;
+	pfd.fd = fd; pfd.events = POLLIN; pfd.revents = 0;
+	if (poll(&pfd, 1, 1000) <= 0) return -1;
+	n = (int)read(fd, buf + got, len - got);
+	if (n <= 0) return -1;
+	got += n;
+    }
+    return got;
+}
+
+static int __NEAR__ x11_handshake(int fd, const unsigned char *cookie, int clen)
+{
+    unsigned char req[64], rep[256];
+    int off = 12, n;
+    memset(req, 0, sizeof req);
+    req[0] = 'l';				/* little-endian */
+    req[2] = 11;				/* proto 11.0 */
+    if (cookie && clen > 0)
+    {
+	req[6] = 18;				/* auth-name len */
+	req[8] = (unsigned char)clen;		/* auth-data len */
+	memcpy(req+off, "MIT-MAGIC-COOKIE-1", 18); off += 20;
+	memcpy(req+off, cookie, clen);		 off += (clen+3)&~3;
+    }
+    if (write(fd, req, off) != off) return -1;
+    if (x11_rd(fd, rep, 8) != 8 || rep[0] != 1) return -1;
+    {
+	long extra = (rep[6]|(rep[7]<<8)) * 4;
+	while (extra > 0)			/* drain setup body */
 	{
-	    unsigned int mask = 0;
-	    void *wr = NULL,*wc = NULL;
-	    int rx = 0,ry = 0,wx = 0,wy = 0;
-	    x11_ms = now;
-	    if (x11_qp(x11_dpy,
-		       x11_root(x11_dpy,x11_scr(x11_dpy)),
-		       &wr,&wc,&rx,&ry,&wx,&wy,&mask))
+	    n = x11_rd(fd, rep, extra > (long)sizeof rep
+				? (int)sizeof rep : (int)extra);
+	    if (n <= 0) return -1;
+	    extra -= n;
+	}
+    }
+    return 0;
+}
+
+static int __NEAR__ x11_open_display(void)
+{
+    const char *d = getenv("DISPLAY");
+    struct sockaddr_un sa;
+    unsigned char cookie[16];
+    int disp = 0, fd, clen, i;
+    if (!d || d[0] != ':' || sscanf(d+1, "%d", &disp) != 1) return -1;
+    memset(&sa, 0, sizeof sa);
+    sa.sun_family = AF_UNIX;
+    snprintf(sa.sun_path, sizeof sa.sun_path, "/tmp/.X11-unix/X%d", disp);
+    clen = x11_get_cookie(cookie, sizeof cookie, disp);
+    for (i = 0; i < 2; i++)		/* cookie, then SI:localuser */
+    {
+	fd = socket(AF_UNIX, SOCK_STREAM, 0);
+	if (fd < 0) return -1;
+	if (connect(fd, (struct sockaddr *)&sa, sizeof sa) == 0 &&
+	    x11_handshake(fd, clen ? cookie : NULL, clen) == 0)
+	{
+	    fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK);
+	    return fd;
+	}
+	close(fd);
+	if (!clen) break;
+	clen = 0;
+    }
+    return -1;
+}
+
+/* evdev keycodes: 50/62 Shift L/R, 37/105 Ctrl L/R, 64/108 Alt L/R,
+   66 CapsLock, 69 NumLock, 78 ScrollLock */
+static void __NEAR__ poll_x11_modifiers(void)
+{
+    static int xfd = -2;	/* -2 untried, -1 unavailable */
+    static unsigned char rep[256];
+    static int replen = 0, pending = 0;
+    static long x11_ms = 0, retry_ms = 0;
+    struct timeval tv;
+    long now;
+    gettimeofday(&tv, NULL);
+    now = tv.tv_sec * 1000 + tv.tv_usec / 1000;
+    if (xfd == -2) { xfd = x11_open_display(); replen = pending = 0; retry_ms = now; }
+    if (xfd < 0) {
+	if (now - retry_ms > 2000)	/* give the display another chance */
+	    xfd = -2;
+	return;
+    }
+    if (now - x11_ms < 50) return;
+    x11_ms = now;
+    if (!pending)
+    {
+	/* QueryKeymap: opcode 44, no arguments — header only (length 1) */
+	unsigned char req[4] = { X_OP_QUERYKEYMAP, 0, 1, 0 };
+	if (write(xfd, req, 4) == 4) pending = 1;
+    }
+    for (;;)
+    {
+	int n = (int)read(xfd, rep + replen, sizeof rep - replen);
+	if (n <= 0)
+	{
+	    if (n == 0) { close(xfd); xfd = -1; }	/* server dropped us */
+	    break;
+	}
+	replen += n;
+	while (replen >= 32)
+	{
+	    /* X packet framing: replies = 32 + length*4 bytes (length
+	       field at rep[4..7] counts 4-byte units past the fixed
+	       32); events and errors are always 32 bytes. Broadcast
+	       events (MappingNotify etc.) arrive even without
+	       selection and must be skipped, not fatal. */
+	    long psize;
+	    if (rep[0] == 1)
+		psize = 32 + ((long)rep[4] | (rep[5]<<8) |
+			      ((long)rep[6]<<16) | ((long)rep[7]<<24)) * 4;
+	    else
+		psize = 32;
+	    if (replen < psize) break;
+	    if (rep[0] == 1 && psize == 40)	/* QueryKeymap reply */
 	    {
+		const unsigned char *k = rep + 8;
 		int ns = 0;
-		if (mask & 0x01) ns |= KS_SHIFT; /* ShiftMask */
-		if (mask & 0x08) ns |= KS_ALT;   /* Mod1Mask */
-		if (mask & 0x04) ns |= KS_CTRL;  /* ControlMask */
+		if ((k[50>>3]&(1<<(50&7))) || (k[62>>3]&(1<<(62&7))))   ns |= KS_SHIFT;
+		if ((k[37>>3]&(1<<(37&7))) || (k[105>>3]&(1<<(105&7)))) ns |= KS_CTRL;
+		if ((k[64>>3]&(1<<(64&7))) || (k[108>>3]&(1<<(108&7)))) ns |= KS_ALT;
+		if (k[66>>3]&(1<<(66&7))) ns |= KS_CAPSLOCK;
+		if (k[69>>3]&(1<<(69&7))) ns |= KS_NUMLOCK;
+		if (k[78>>3]&(1<<(78&7))) ns |= KS_SCRLOCK;
 		if (ns != shift_status)
 		{
 		    shift_status = ns;
 		    pushEvent(KE_SHIFTKEYS);
 		}
+		pending = 0;
 	    }
+	    memmove(rep, rep+psize, replen-psize);
+	    replen -= psize;
 	}
+	if (replen == sizeof rep) { close(xfd); xfd = -1; return; }
     }
 }
 
