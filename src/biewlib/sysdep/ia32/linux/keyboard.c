@@ -35,9 +35,11 @@ static const char rcs_id[] = "$Id: keyboard.c,v 1.14 2009/09/24 09:12:13 nickols
 #include <termios.h>
 #include <sys/time.h>
 #include <sys/ioctl.h>
+#ifndef BIEW_NO_X11
 #include <sys/socket.h>
 #include <sys/poll.h>
 #include <sys/un.h>
+#endif
 #if !defined(__COSMOPOLITAN__)
 #include <sys/kd.h>
 #include <sys/vt.h>
@@ -459,6 +461,24 @@ static int __NEAR__ map_curses_key(int ch)
 }
 #endif
 
+/* Bounded wait for a continuation byte of an escape sequence: pty/ssh
+   can split ESC... writes, and a leading ESC decoded too early reads as
+   a lone-ESC (quit).  Costs at most ~25 ms once per sequence. */
+static int getwait(unsigned char *x)
+{
+    if (read(in_fd, x, 1) == 1) return 0;
+    {
+	fd_set rfds;
+	struct timeval tv;
+	FD_ZERO(&rfds);
+	FD_SET(in_fd, &rfds);
+	tv.tv_sec = 0; tv.tv_usec = 25000;
+	if (select(in_fd + 1, &rfds, NULL, NULL, &tv) > 0 &&
+	    read(in_fd, x, 1) == 1) return 0;
+    }
+    return -1;
+}
+
 void __FASTCALL__ ReadNextEvent(void)
 {
 #define get(x)	read(in_fd,&(x),1)
@@ -687,7 +707,7 @@ void __FASTCALL__ ReadNextEvent(void)
 		goto place_key;
 	    }
 	    for (i = 1; i < SEQ_LEN - 1; i++) {
-		if(get(c[i]) < 0) break;
+		if(getwait(&c[i]) < 0) break;
 	    }
 	    if(rawkb_mode)
 	    {
@@ -868,15 +888,13 @@ int __FASTCALL__ __kbdTestKey(unsigned long flg)
     return keybuf.current;
 }
 
-/*
-   When not on a Linux console (xterm/Konsole/ssh) the terminal protocol
-   never reports bare Shift/Ctrl/Alt presses, so the prompt bar cannot
-   track modifier rows. If DISPLAY is set we ask the X server for the
-   physical key state directly: the protocol is spoken over
-   /tmp/.X11-unix/X<d> without libX11 — dlopen is unavailable under
-   Cosmopolitan, and a 4-byte QueryKeymap request whose reply carries
-   the down-map of all 256 keycodes is all we need.
-*/
+/* Optional modifier-source: when not on a Linux console the terminal
+   protocol never reports bare Shift/Ctrl/Alt presses. If DISPLAY is set
+   we poll the X server's keymap directly over /tmp/.X11-unix/X<d>
+   (raw protocol — no libX11 linkage, no dlopen; safe under cosmo).
+   Not a dependency: absent DISPLAY or a failed handshake disables it
+   silently, and -DBIEW_NO_X11 compiles it out entirely. */
+#ifndef BIEW_NO_X11
 
 #define X_OP_QUERYKEYMAP	44
 
@@ -1078,6 +1096,9 @@ static void __NEAR__ poll_x11_modifiers(void)
     }
 }
 
+#endif /* BIEW_NO_X11 */
+
+
 int __FASTCALL__ __kbdGetKey (unsigned long flg)
 {
     int key = 0, s = 0;
@@ -1086,7 +1107,10 @@ int __FASTCALL__ __kbdGetKey (unsigned long flg)
 
     while (!keybuf.current) {
 	__OsYield();
-	if (!on_console) { poll_x11_modifiers();
+	if (!on_console) {
+#ifndef BIEW_NO_X11
+	    poll_x11_modifiers();
+#endif
 	    /* non-blocking read — needed when SIGIO can't reach us
 	       (e.g. Cosmopolitan builds, where O_ASYNC stays off) */
 	    ReadNextEvent();
@@ -1276,14 +1300,11 @@ void __FASTCALL__ __init_keyboard(const char *user_cp)
 
     keybuf.current = 0;
 
-    /* With a terminal library decoding (ncurses/notcurses), input is
-       drained only from the __kbdGetKey poll loop — never inside a
-       signal, which would re-enter the library and keybuf/pushEvent. */
-#if defined(HAVE_NCURSES) || defined(HAVE_NOTCURSES)
-    if (termlib_input()) { signal(SIGIO, dummy_handler); }
-    else
-#endif
-    signal(SIGIO, (void *) ReadNextEvent);
+    /* Input is drained only from the __kbdGetKey/__OsGetCBreak poll
+       loops.  ReadNextEvent must never run inside SIGIO: a byte arriving
+       mid-sequence makes the handler re-enter with its own buffer and
+       the two calls split the escape sequence (~30 % of keys lost). */
+    signal(SIGIO, dummy_handler);
 }
 
 void __FASTCALL__ __term_keyboard(void)
