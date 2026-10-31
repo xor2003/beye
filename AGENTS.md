@@ -59,7 +59,7 @@ grep -cE "runtime error|AddressSanitizer" /tmp/pty.txt   # expect 0
 ```
 
 Full interactive matrix (menus, mode/nav keys, dialogs open+close, clean
-exits, and bare Shift/Ctrl/Alt legend switch+restore via xdotool):
+exits):
 
 ```sh
 python3 tests/drive.py --bin src/biew --bin "sh ./biew.com"
@@ -67,7 +67,6 @@ python3 tests/drive.py --bin src/biew --bin "sh ./biew.com"
 
 Native runs TERM=dumb (raw-parser path); the APE runs TERM=vt100 via `sh`
 — direct exec can detour through a registered MZ binfmt handler.
-Modifier-legend cases SKIP without DISPLAY/xdotool.
 
 ## Repo layout
 

@@ -14,24 +14,21 @@ TERM=dumb (notcurses declines it) and the APE with TERM=vt100 (it refuses
 binfmt_misc MZ handler (e.g. kvikdos) is registered, a direct exec is
 routed through that interpreter's polyglot hop and can be flaky.
 
-Modifier-legend cases (bare Shift/Ctrl/Alt held with no other key)
-cannot be injected as bytes — terminals do not encode them.  BIEW picks
-them up via the X11 keymap poll, so the harness injects them with
-`xdotool keydown/keyup` against the X server.  Those cases SKIP when
-DISPLAY or xdotool is unavailable.
-
 Usage:
     drive.py --bin /path/to/biew [--bin ...] [--filter REGEX] [--list]
-    drive.py --bin ./biew --bin ./biew.com     # compare native vs APE
+    drive.py --bin ./biew --bin "sh ./biew.com"  # compare native vs APE
+
+Note: the modifier-legend switch (Shift/Ctrl/Alt held alone) cannot be
+exercised from a PTY — terminals never encode bare modifiers.  That path
+is driven by the Linux-console keymap (on_console) or kitty-keyboard
+events, so it is not part of this matrix.
 """
 
 import fcntl
 import os
 import re
 import select
-import shutil
 import struct
-import subprocess
 import sys
 import termios
 import time
@@ -231,10 +228,6 @@ class Sess:
         except OSError:
             pass
 
-    def xdotool(self, *args):
-        subprocess.run(["xdotool", *args],
-                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-
     def alive(self):
         if self._dead:
             return False
@@ -266,7 +259,7 @@ class Sess:
 # ------------------------------------------------------------- cases ------
 #
 # Case fields:
-#   steps       list of ("key", name[, settle]) / ("xdown"|"xup", keysym)
+#   steps       list of ("key", name[, settle])
 #   expect      substrings that must ALL appear on the final screen;
 #               "@@diff" = screen differs from startup, "@@same" = identical
 #   legend      substrings that must ALL appear on the bottom (legend) row
@@ -274,7 +267,6 @@ class Sess:
 #   post        optional second (steps, expect, legend) checked after the
 #               first phase — used to verify dialogs close on ESC
 #   expect_exit the process must be dead after `steps`
-#   needs_x     requires DISPLAY + xdotool (bare-modifier injection)
 
 TESTFILE = os.environ.get("BIEW_TEST_FILE", "/tmp/t.com")
 
@@ -282,10 +274,9 @@ def cases():
     E = []
 
     def add(name, steps, expect=(), legend=(), absent=(), post=None,
-            expect_exit=False, needs_x=False):
+            expect_exit=False):
         E.append(dict(name=name, steps=steps, expect=expect, legend=legend,
-                      absent=absent, post=post, expect_exit=expect_exit,
-                      needs_x=needs_x))
+                      absent=absent, post=post, expect_exit=expect_exit))
 
     # -- startup / legend -------------------------------------------------
     add("startup", [],
@@ -330,20 +321,6 @@ def cases():
     # -- clean exits -------------------------------------------------------
     add("quit-f10",  [("key", "f10", 0.5)], expect_exit=True)
     add("quit-esc",  [("key", "esc", 0.5)], expect_exit=True)
-
-    # -- modifier legend switch + restore (X11 poll via xdotool) -----------
-    add("legend-shift-down", [("xdown", "Shift_L")],
-        legend=["S1", "About"], needs_x=True)
-    add("legend-shift-up",   [("xdown", "Shift_L"), ("xup", "Shift_L")],
-        legend=["1Help"], absent=["S1About"], needs_x=True)
-    add("legend-ctrl-down",  [("xdown", "Control_L")],
-        legend=["C1"], needs_x=True)
-    add("legend-ctrl-up",    [("xdown", "Control_L"), ("xup", "Control_L")],
-        legend=["1Help"], needs_x=True)
-    add("legend-alt-down",   [("xdown", "Alt_L")],
-        legend=["A1"], needs_x=True)
-    add("legend-alt-up",     [("xdown", "Alt_L"), ("xup", "Alt_L")],
-        legend=["1Help"], absent=["Reload"], needs_x=True)
     return E
 
 
@@ -383,14 +360,10 @@ def run_case(argv, env, case, wait=3.0):
         s.pump(0.05)
         base = s.scr.text()
         for step in case["steps"]:
-            kind = step[0]
-            if kind == "key":
-                s.key(KEYS[step[1]])
-            elif kind in ("xdown", "xup"):
-                s.xdotool("key" + kind[1:], step[1])
+            s.key(KEYS[step[1]])
             s.pump(step[2] if len(step) > 2 else 0.30)
-        # poll: XTEST/xdotool and app redraw both lag
-        deadline = time.time() + (wait if case["needs_x"] else 0.8)
+        # poll: app redraw can lag behind key delivery
+        deadline = time.time() + wait
         while True:
             if case["expect_exit"]:
                 missing, present, scr, leg = [], [], s.scr.text(), s.scr.legend()
@@ -447,7 +420,6 @@ def main():
         print("need --bin", file=sys.stderr)
         return 2
 
-    have_x = bool(os.environ.get("DISPLAY")) and bool(shutil.which("xdotool"))
     results = {}
     for cmd in bins:
         tag = cmd.split()[-1] if " " in cmd else os.path.basename(cmd)
@@ -458,10 +430,6 @@ def main():
         for case in cases():
             name = case["name"]
             if filt and not filt.search(name):
-                continue
-            if case["needs_x"] and not have_x:
-                results[tag].append((name, None))
-                print("%-18s %-24s SKIP (no DISPLAY/xdotool)" % (tag, name))
                 continue
             ok, msg = run_case(argv, env, case)
             for _ in range(2):                        # flaky-input retries
@@ -476,11 +444,9 @@ def main():
 
     print()
     fails = sum(1 for r in results.values() for (_, ok) in r if ok is False)
-    skips = sum(1 for r in results.values() for (_, ok) in r if ok is None)
     total = sum(len(r) for r in results.values())
-    print("%d/%d passed%s%s" % (
-        total - fails - skips, total,
-        ", %d skipped" % skips if skips else "",
+    print("%d/%d passed%s" % (
+        total - fails, total,
         "  — %d FAILURES" % fails if fails else ""))
     return 1 if fails else 0
 
