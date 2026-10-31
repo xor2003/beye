@@ -462,9 +462,24 @@ void __FASTCALL__ __init_vio(const char *user_cp,unsigned long flags)
 #ifdef HAVE_NOTCURSES
 	{
 	    notcurses_options nopts;
+	    const char *term_save = NULL;
 	    memset(&nopts, 0, sizeof(nopts));
 	    nopts.flags = NCOPTION_SUPPRESS_BANNERS | NCOPTION_NO_FONT_CHANGES;
+	    /* Konsole advertises TERM=xterm-256color but sends its own
+	       SS3-modified F-key encoding (ESC O <mod> P/Q/R/S for F1-F4),
+	       which the xterm terminfo does not contain, so modified F1-F4
+	       arrive undecoded.  The konsole-256color terminfo maps them;
+	       use it when running under Konsole. */
+	    if ((getenv("KONSOLE_VERSION") || getenv("KONSOLE_DBUS_SERVICE")) &&
+		getenv("TERM") && strcmp(getenv("TERM"), "xterm-256color") == 0) {
+		term_save = getenv("TERM");
+		setenv("TERM", "konsole-256color", 1);
+	    }
 	    biew_nc = notcurses_init(&nopts, stdout);
+	    if (!biew_nc && term_save) {
+		setenv("TERM", term_save, 1);	/* no konsole terminfo: retry */
+		biew_nc = notcurses_init(&nopts, stdout);
+	    }
 	    if (biew_nc) {
 		unsigned ny, nx;
 		nc_stdp = notcurses_stdplane(biew_nc);

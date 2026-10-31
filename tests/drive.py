@@ -68,7 +68,8 @@ for _n in range(1, 13):
         KEYS["cf%d" % _n]  = b"\x1b[1;5" + _fin
         KEYS["af%d" % _n]  = b"\x1b[1;3" + _fin       # xterm Alt form
         KEYS["ma%d" % _n]  = b"\x1b\x1bO" + _fin      # meta prefix
-        KEYS["osf%d" % _n] = b"\x1bO2" + _fin         # SS3-modifier form
+        KEYS["osf%d" % _n] = b"\x1bO2" + _fin         # SS3-Shift form
+        KEYS["ocf%d" % _n] = b"\x1bO5" + _fin         # SS3-Ctrl form (Konsole)
     else:
         _num = str(_FMODNUM[_n]).encode()
         KEYS["sf%d" % _n] = b"\x1b[%s;2~" % _num
@@ -283,14 +284,22 @@ def cases():
         legend=["1Help", "5Goto", "10Quit"])
 
     # -- dialogs: open, verify, ESC back to main legend --------------------
+    # t.com opens in disasm mode: F1 -> disasm help topic,
+    # Shift-F1 -> disassembler select, Ctrl-F1 -> bitness select (Hiew)
     add("help-f1",       [("key", "f1", 0.8)],
-        expect=["Help for"],
+        expect=["How to see"],
         post=([("key", "esc", 0.6)], ["1Help"], ()))
     add("about-sf1",     [("key", "sf1", 0.8)],
-        expect=["Binary Viewer"],
+        expect=["Select disassembler"],
         post=([("key", "esc", 0.6)], ["1Help"], ()))
     add("about-sf1-ss3", [("key", "osf1", 0.8)],
-        expect=["Binary Viewer"],
+        expect=["Select disassembler"],
+        post=([("key", "esc", 0.6)], ["1Help"], ()))
+    add("cf1-bitness",      [("key", "cf1", 0.8)],
+        expect=["Select bitness mode"],
+        post=([("key", "esc", 0.6)], ["1Help"], ()))
+    add("cf1-bitness-kon",  [("key", "ocf1", 0.8)],
+        expect=["Select bitness mode"],
         post=([("key", "esc", 0.6)], ["1Help"], ()))
     add("goto-f5",       [("key", "f5", 0.8)],
         expect=["UsrNam"],
