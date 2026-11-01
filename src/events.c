@@ -104,6 +104,7 @@ static int __NEAR__ __FASTCALL__ __GetEvent( void (*prompt)(void) ,TWindow *win)
                       if((__MsGetBtns() & MS_LEFTPRESS) != MS_LEFTPRESS) break;
                       __MsGetPos(&mx,&my);
                     }
+                    __MsGetPos(&mx,&my);
                     if(my != (unsigned)(tvioHeight - 1)) continue;
                     return getPromptKey(__kbdGetShiftsKey());
                   }

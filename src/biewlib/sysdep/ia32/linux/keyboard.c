@@ -137,6 +137,9 @@ unsigned int scancode_caps_table[KSCANSIZE] =
 
 
 static mevent mouse = {0, 0, 0, 0};
+/* a decoded mouse event means getch() may already have pulled follow-up
+   bytes into ncurses' fifo — keep pumping even while the kernel fd is idle */
+static int mouse_dirty;
 
 /*
 
@@ -178,7 +181,8 @@ static void __FASTCALL__ pushEvent(unsigned _event)
 #endif
     if (event && keybuf.current < KBUFSIZE) {
 	if (keybuf.current)
-	    memmove(keybuf.pool, &keybuf.pool[1], keybuf.current);
+	    memmove(&keybuf.pool[1], keybuf.pool,
+		    keybuf.current * sizeof(keybuf.pool[0]));
 	keybuf.pool[0] = event;
 	keybuf.current++;
     }
@@ -367,13 +371,14 @@ static int kitty_csi(const unsigned char *s, int n, int fin)
 	if (n < 1 || s[0] != '<') return KP_NONE;
 	b = kget(s, n, 0, 0); x = kget(s, n, 1, 0); y = kget(s, n, 2, 0);
 	if (b < 0 || x < 1 || y < 1) return KP_NONE;
+	mouse.x = x - 1;
+	mouse.y = y - 1;
+	mouse_dirty = 1;
 	if (fin == 'm')
 	{
 	    mouse.buttons = mouse.pressed = 0;
 	    return KP_NONE;
 	}
-	mouse.x = x - 1;
-	mouse.y = y - 1;
 	if (b & 64)	/* wheel */
 	    return (b & 1) ? KE_DOWNARROW : KE_UPARROW;
 	mouse.pressed = 1;
@@ -764,6 +769,9 @@ void __FASTCALL__ ReadNextEvent(void)
 			if (getmouse(&me) == OK)
 			{
 			    int m = 0;
+			    mouse_dirty = 1;
+			    if (me.bstate & BUTTON4_PRESSED) { ret(KE_UPARROW); }
+			    if (me.bstate & BUTTON5_PRESSED) { ret(KE_DOWNARROW); }
 			    if (me.bstate & (BUTTON1_PRESSED|BUTTON1_CLICKED))
 				{ m = 1; mouse.buttons |= MS_LEFTPRESS; }
 			    if (me.bstate & (BUTTON2_PRESSED|BUTTON2_CLICKED))
@@ -775,7 +783,7 @@ void __FASTCALL__ ReadNextEvent(void)
 			    else mouse.pressed = 1;
 			    mouse.x = me.x;
 			    mouse.y = me.y;
-			    if (m) ret(KE_MOUSE);
+			    if (m) { ret(KE_MOUSE); }
 			}
 			continue;
 		    }
@@ -890,6 +898,23 @@ int __FASTCALL__ __MsGetBtns(void)
 #ifdef	HAVE_MOUSE
     if (gpmhandle) ReadNextEvent();
 #endif
+    /* ncurses/kitty: the mouse state only advances when the tty input is
+       drained — the __GetEvent release-wait loops poll us, so pump here.
+       Gate the pump: bare getch() does cursor bookkeeping on every call,
+       and the wait loops would spin it into an output flood.  Kernel-
+       readable covers new input; mouse_dirty covers events already pulled
+       into ncurses' fifo by an earlier pass. */
+    if (!on_console && in_fd >= 0)
+    {
+	fd_set fds;
+	struct timeval z = { 0, 0 };
+	FD_ZERO(&fds); FD_SET(in_fd, &fds);
+	if (mouse_dirty || select(in_fd + 1, &fds, NULL, NULL, &z) > 0)
+	{
+	    mouse_dirty = 0;
+	    ReadNextEvent();
+	}
+    }
     return mouse.pressed ? mouse.buttons : 0;
 }
 

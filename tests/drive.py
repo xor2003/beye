@@ -115,6 +115,19 @@ for _n in range(1, 13):
     KEYS["kcf%d" % _n] = b"\x1b[" + _k + b";5u"       # ctrl
     KEYS["kaf%d" % _n] = b"\x1b[" + _k + b";3u"       # alt
 
+# SGR mouse (1006): press 'M' / release 'm', 1-based coords.  The legend
+# row is y=25 and each prompt button is 8 columns wide, so button n
+# occupies x = (n-1)*8+1 .. (n-1)*8+8 (F10 = everything >= 73).
+for _i in range(10):
+    _x = _i * 8 + 4                                     # inside button i+1
+    KEYS["mpf%d" % (_i + 1)] = b"\x1b[<0;%d;25M" % _x   # press on legend
+    KEYS["mrf%d" % (_i + 1)] = b"\x1b[<0;%d;25m" % _x   # release on legend
+KEYS["mroff"] = b"\x1b[<0;36;15m"    # release above the legend (drag off)
+KEYS["mpdlg"] = b"\x1b[<0;40;2M"     # press/release outside a centered box
+KEYS["mrdlg"] = b"\x1b[<0;40;2m"
+KEYS["mwup"]  = b"\x1b[<64;40;12M"   # wheel up / down mid-screen
+KEYS["mwdn"]  = b"\x1b[<65;40;12M"
+
 # ------------------------------------------------------- vt100 scraper ----
 
 DECSG = {"q": "─", "x": "│", "j": "┘", "k": "┐", "l": "┌", "m": "└",
@@ -556,6 +569,32 @@ def cases():
     add("menu-fu-select", [("key", "cf9", 0.9), ("key", "enter", 0.9)],
         enc="xt", expect=["@@diff"],
         post=([("key", "esc", 0.6)], ["1Help"], ()))
+
+    # -- mouse: SGR clicks on the legend row fire the prompt buttons -----
+    add("mclick-f1",  [("key", "mpf1", 0.4), ("key", "mrf1", 0.9)],
+        expect=["Help for"], legend=["7Search"],
+        post=([("key", "esc", 0.6)], ["1Help"], ()))
+    add("mclick-f5",  [("key", "mpf5", 0.4), ("key", "mrf5", 0.9)],
+        expect=["Enter offset"], legend=["10Es"],
+        post=([("key", "esc", 0.6)], ["1Help"], ()))
+    # press on the legend but release off it = drag away -> no action
+    add("mclick-drag",[("key", "mpf5", 0.4), ("key", "mroff", 0.9)],
+        expect=["@@same"], legend=["1Help"])
+    # click outside an open viewer dismisses it (KE_ESCAPE path)
+    add("mclick-dismiss", [("key", "f1", 0.9), ("key", "mpdlg", 0.4),
+                           ("key", "mrdlg", 0.9)],
+        legend=["1Help"], absent=["Help for"])
+    # wheel events on the content area scroll like arrow keys
+    add("mwheel",     [("key", "mwdn", 0.5), ("key", "mwdn", 0.4)],
+        expect=["@@diff"])
+    add("mclick-quit", [("key", "mpf10", 0.4), ("key", "mrf10", 0.8)],
+        expect_exit=True)
+    # same clicks through the kitty CSI u decoder's SGR path
+    add("mclick-f1-kit",  [("key", "mpf1", 0.4), ("key", "mrf1", 0.9)],
+        expect=["Help for"], legend=["7Search"], enc="kit",
+        post=([("key", "kesc", 0.6)], ["1Help"], ()))
+    add("mclick-drag-kit",[("key", "mpf5", 0.4), ("key", "mroff", 0.9)],
+        expect=["@@same"], legend=["1Help"], enc="kit")
 
     # -- kitty keyboard protocol (CSI u) ---------------------------------
     # modifier-only press/release switches the legend, like on console
