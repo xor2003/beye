@@ -185,10 +185,6 @@ void __FASTCALL__ __init_sys(void)
 	for (i = 0; termtab[i].name != NULL && strcasecmp(t, termtab[i].name); i++);
     terminal = &termtab[i];
 
-#ifdef HAVE_NOTCURSES
-    if (terminal->type == TERM_UNKNOWN)
-	terminal = &termtab[2]; /* xterm: notcurses queries the terminal itself */
-#else
     if (terminal->type == TERM_UNKNOWN) {
 	if (t != NULL && (!strncasecmp(t, "xterm", 5) || !strncasecmp(t, "screen", 6) ||
 	    !strncasecmp(t, "tmux", 4) || !strncasecmp(t, "rxvt", 4) ||
@@ -200,10 +196,9 @@ void __FASTCALL__ __init_sys(void)
     }
 #ifdef _VT100_
     if (terminal->type == TERM_UNKNOWN) {
-        printm("Sorry, I can't handle terminal type '%s'.\nIf you are sure it is vt100 compatible, try setting TERM to vt100:\n\n$ TERM=vt100 biew filename\n\nIf you will not succeed, use slang/curses version of BIEW.\n\n", t);
+        printm("Sorry, I can't handle terminal type '%s'.\nIf you are sure it is vt100 compatible, try setting TERM to vt100:\n\n$ TERM=vt100 biew filename\n\n", t);
         exit(2);
     }
-#endif
 #endif
 	
     if (i == 5) output_7 = 1;	/* beterm is (B)roken (E)vil (TERM)inal */

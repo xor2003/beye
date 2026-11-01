@@ -36,26 +36,8 @@ static const char rcs_id[] = "$Id: keyboard.c,v 1.14 2009/09/24 09:12:13 nickols
 #include <sys/time.h>
 #include <sys/ioctl.h>
 #include <sys/select.h>
-#if !defined(__COSMOPOLITAN__)
 #include <sys/kd.h>
 #include <sys/vt.h>
-#else
-/* Cosmopolitan has no Linux-console headers; on_console is always 0 there,
-   so these ioctls are dead code. */
-#define K_XLATE		0
-#define K_RAW		0
-#define KDSKBMODE	0
-#define VT_GETMODE	0
-#define VT_SETMODE	0
-#define VT_GETSTATE	0
-#define VT_ACTIVATE	0
-#define VT_RELDISP	0
-#define VT_ACKACQ	0
-#define VT_PROCESS	0
-#define TCSETSW		TCSETS
-struct vt_mode { char mode, waitv; short relsig, acqsig, frsig; };
-struct vt_stat { unsigned short v_active, v_signal, v_state; };
-#endif
 
 #include "biewlib/kbd_code.h"
 #include "biewlib/biewlib.h"
@@ -66,49 +48,19 @@ struct vt_stat { unsigned short v_active, v_signal, v_state; };
 static int gpmhandle;
 #endif
 
-#ifdef HAVE_NOTCURSES
-#include <notcurses/notcurses.h>
-extern struct notcurses *biew_nc;	/* created by __init_vio (non-console) */
-#endif
-#if defined(HAVE_NOTCURSES) || defined(HAVE_NCURSES)
+#ifdef HAVE_NCURSES
+#include <curses.h>
+extern SCREEN *biew_scr;	/* created by __init_vio (non-console) */
 extern void __FASTCALL__ BiewScreenResize(void) __attribute__((weak));	/* biew.c: re-layout top-level windows; weak so -lbiew-only tools still link */
 #endif
 
-#ifdef HAVE_NCURSES
-#include <curses.h>
-static SCREEN *nc_scr = NULL;
-static FILE *nc_devnull = NULL;
-static FILE *nc_ttyin = NULL;
-#endif
-
-#if defined(HAVE_NOTCURSES) && defined(HAVE_NCURSES)
-/* kitty-keyboard terminals send lone ESC as CSI 27 u and bare modifiers
-   as their own events — notcurses decodes those correctly, so keep its
-   input there.  Everywhere else ncurses owns key decoding. */
-static int __kbdKittyTerm(void)
-{
-    const char *t = getenv("TERM");
-    return
-	(t && (strstr(t, "kitty") || strstr(t, "ghostty") ||
-	       strstr(t, "foot") || strstr(t, "wezterm") ||
-	       strstr(t, "alacritty") || strstr(t, "contour") ||
-	       strstr(t, "rio"))) ||
-	getenv("KITTY_WINDOW_ID") || getenv("WEZTERM_PANE") ||
-	getenv("GHOSTTY_RESOURCES_DIR") || getenv("ALACRITTY_WINDOW_ID")
-	!= NULL;
-}
-#endif
-
-/* true when a terminal library (ncurses or notcurses) owns input
-   decoding on this terminal; in that case SIGIO does not pump and
-   waiters like __inputRawInfo must drive ReadNextEvent themselves */
+/* true when a terminal library (ncurses) owns input decoding on this
+   terminal; in that case SIGIO does not pump and waiters like
+   __inputRawInfo must drive ReadNextEvent themselves */
 int __NEAR__ termlib_input(void)
 {
-#ifdef HAVE_NOTCURSES
-    if (biew_nc) return 1;
-#endif
 #ifdef HAVE_NCURSES
-    if (nc_scr) return 1;
+    if (biew_scr) return 1;
 #endif
     return 0;
 }
@@ -183,130 +135,6 @@ unsigned int scancode_caps_table[KSCANSIZE] =
     KE_PGDN,	KE_INS,	KE_DEL,	KE_NONE
 };
 
-typedef struct {
-    char c;
-    int key;
-} seqtbl;
-
-typedef seqtbl pseq[];
-typedef seqtbl p1seq[1]; /**< dummy type to make compiler happy */
-
-typedef struct {
-    char pre1;
-    char pre2;
-    char suf;
-    p1seq *s;
-} eseq;
-
-/**
-    translatable sequences
-*/
-
-#ifndef HAVE_NOTCURSES
-static const pseq seq0 = {
-    {'A',KE_UPARROW},
-    {'B',KE_DOWNARROW},
-    {'C',KE_RIGHTARROW},
-    {'D',KE_LEFTARROW},
-    {'P',KE_F(1)},
-    {'Q',KE_F(2)},
-    {'R',KE_F(3)},
-    {'w',KE_F(3)},
-    {'y',KE_F(3)},
-    {'S',KE_F(4)},
-    {'x',KE_F(4)},
-    {'t',KE_F(5)},
-    {'v',KE_F(5)},
-    {'u',KE_F(6)},
-    {'l',KE_F(6)},
-    {'q',KE_F(7)},
-    {'s',KE_F(7)},
-    {'r',KE_F(8)},
-    {'p',KE_F(9)},
-    {'n',KE_F(9)},
-    {0,0}},
-seq1 = {
-    {'A',KE_UPARROW},
-    {'B',KE_DOWNARROW},
-    {'C',KE_RIGHTARROW},
-    {'D',KE_LEFTARROW},
-    {'H',KE_HOME},
-    {'K',KE_END},
-    {0,0}},
-seq2 = {
-    {'A',KE_F(1)},
-    {'B',KE_F(2)},
-    {'C',KE_F(3)},
-    {'D',KE_F(4)},
-    {'E',KE_F(5)},
-    {0,0}},
-seq3 = {
-    {'1',KE_HOME},
-    {'2',KE_INS},
-    {'3',KE_DEL},
-    {'4',KE_END},
-    {'5',KE_PGUP},
-    {'6',KE_PGDN},
-    {'7',KE_HOME},
-    {'8',KE_END},
-    {'J',KE_CTL_PGDN},
-    {0,0}},
-seq4 = {
-    {'1',KE_F(1)},
-    {'2',KE_F(2)},
-    {'3',KE_F(3)},
-    {'4',KE_F(4)},
-    {'5',KE_F(5)},
-    {'7',KE_F(6)},
-    {'8',KE_F(7)},
-    {'9',KE_F(8)},
-    {0,0}},
-seq5 = {
-    {'0',KE_F(9)},
-    {'1',KE_F(10)},
-    {'3',KE_F(11)},
-    {'4',KE_F(12)},
-    {'5',KE_SHIFT_F(3)},
-    {'6',KE_SHIFT_F(4)},
-    {'8',KE_SHIFT_F(5)},
-    {'9',KE_SHIFT_F(6)},
-    {0,0}},
-seq6 = {
-    {'1',KE_SHIFT_F(7)},
-    {'2',KE_SHIFT_F(8)},
-    {'3',KE_SHIFT_F(9)},
-    {'4',KE_SHIFT_F(10)},
-    {0,0}},
-seq7 = {
-    {'1',KE_CTL_F(1)},
-    {'2',KE_CTL_F(2)},
-    {'3',KE_CTL_F(3)},
-    {'4',KE_CTL_F(4)},
-    {'5',KE_CTL_F(5)},
-    {'7',KE_CTL_F(6)},
-    {'8',KE_CTL_F(7)},
-    {'9',KE_CTL_F(8)},
-    {0,0}},
-seq8 = {
-    {'0',KE_CTL_F(10)},
-    {'1',KE_CTL_F(11)},
-    {0,0}};
-
-#define SEQ_LEN 10	/**< max sequense length */
-#define SEQ_NUM 9	/**< number of sequence categories */
-
-static eseq S[SEQ_NUM] = {
-{'O', 0, 0, (p1seq *)seq0 },
-{'[', 0, 0, (p1seq *)seq1 },
-{'[', '[', 0, (p1seq *)seq2 },
-{'[', 0, '~', (p1seq *)seq3 },
-{'[', '1', '~', (p1seq *)seq4 },
-{'[', '2', '~', (p1seq *)seq5 },
-{'[', '3', '~',	(p1seq *)seq6 },
-{'[', '1', '^', (p1seq *)seq7 },
-{'[', '2', '^', (p1seq *)seq8 },
-};
-#endif /* HAVE_NOTCURSES */
 
 static mevent mouse = {0, 0, 0, 0};
 
@@ -377,7 +205,6 @@ static void __FASTCALL__ console_enter(void)
     ReadNextEvent is non-blocking
 */
 
-#ifdef HAVE_NOTCURSES
 /* terminfo maps modified F-keys to F13+ (ncurses convention):
    +12 shift, +24 ctrl, +36 ctrl+shift, +48 alt.
    n is the raw F-number (1..60); returns KE_F(base)|ADD_* or 0. */
@@ -395,48 +222,6 @@ unsigned __FASTCALL__ __kbdModFKey(unsigned n)
     return k;
 }
 
-static int __NEAR__ map_nc_input(const ncinput *ni)
-{
-    int k = 0;
-    unsigned id = ni->id;
-    if (id >= NCKEY_F01 && id <= NCKEY_F60) k = __kbdModFKey(id - NCKEY_F01 + 1);
-    else if (id < 0x80) k = (int)id;
-    else switch (id)
-    {
-	case NCKEY_ENTER:	k = KE_ENTER; break;
-	case NCKEY_UP:		k = KE_UPARROW; break;
-	case NCKEY_DOWN:	k = KE_DOWNARROW; break;
-	case NCKEY_LEFT:	k = KE_LEFTARROW; break;
-	case NCKEY_RIGHT:	k = KE_RIGHTARROW; break;
-	case NCKEY_HOME:	k = KE_HOME; break;
-	case NCKEY_END:		k = KE_END; break;
-	case NCKEY_INS:		k = KE_INS; break;
-	case NCKEY_DEL:		k = KE_DEL; break;
-	case NCKEY_PGUP:	k = KE_PGUP; break;
-	case NCKEY_PGDOWN:	k = KE_PGDN; break;
-	case NCKEY_BACKSPACE:	k = KE_BKSPACE; break;
-	case NCKEY_RESIZE:
-	    {
-		struct winsize wsz;
-		/* stddim_yx may lag one event behind; kernel winsize is always current */
-		if (ioctl(in_fd, TIOCGWINSZ, &wsz) < 0 || !wsz.ws_col || !wsz.ws_row)
-		    return 0;
-		if ((unsigned)wsz.ws_col != (unsigned)tvioWidth ||
-		    (unsigned)wsz.ws_row != (unsigned)tvioHeight)
-		{
-		    __vioResize(wsz.ws_col, wsz.ws_row);
-		    if (BiewScreenResize) BiewScreenResize();
-		}
-	    }
-	    return 0;
-    }
-    if (!k) return 0;
-    if (ncinput_shift_p(ni)) k |= ADD_SHIFT;
-    if (ncinput_alt_p(ni))   k |= ADD_ALT;
-    if (ncinput_ctrl_p(ni))  k |= ADD_CONTROL;
-    return k;
-}
-#endif
 
 #ifdef HAVE_NCURSES
 static int __NEAR__ map_curses_key(int ch)
@@ -481,35 +266,14 @@ static int __NEAR__ map_curses_key(int ch)
 }
 #endif
 
-/* Bounded wait for a continuation byte of an escape sequence: pty/ssh
-   can split ESC... writes, and a leading ESC decoded too early reads as
-   a lone-ESC (quit).  Costs at most ~25 ms once per sequence. */
-#ifndef HAVE_NOTCURSES
-static int getwait(unsigned char *x)
-{
-    if (read(in_fd, x, 1) == 1) return 0;
-    {
-	fd_set rfds;
-	struct timeval tv;
-	FD_ZERO(&rfds);
-	FD_SET(in_fd, &rfds);
-	tv.tv_sec = 0; tv.tv_usec = 25000;
-	if (select(in_fd + 1, &rfds, NULL, NULL, &tv) > 0 &&
-	    read(in_fd, x, 1) == 1) return 0;
-    }
-    return -1;
-}
-#endif /* HAVE_NOTCURSES */
 
 void __FASTCALL__ ReadNextEvent(void)
 {
 #define get(x)	read(in_fd,&(x),1)
 #define ret(x)	pushEvent((x)); return;
-#define set_s(x) shift_status &= (x); shift_status ^= (x); ret(KE_SHIFTKEYS);
 
 	unsigned key = 0;
 	int i;
-	int alt_prefix = 0;
 
 #ifdef HAVE_MOUSE
     if (gpmhandle) {
@@ -601,63 +365,10 @@ void __FASTCALL__ ReadNextEvent(void)
 	    }
         } else {
 /*
-    VT100 emulation — notcurses decodes the input stream; builds
-    without HAVE_NOTCURSES keep the hand-rolled parser below.
+    VT100 emulation — ncurses decodes the input stream.
 */
-#ifndef HAVE_NOTCURSES
-	    unsigned char c[SEQ_LEN];
-#endif
-
-#ifdef HAVE_NOTCURSES
-	    if (biew_nc)
-	    {
-		ncinput ni;
-		while (notcurses_get_nblock(biew_nc, &ni))
-		{
-		    int kc;
-		    switch (ni.id)	/* kitty kbd: bare modifier events */
-		    {
-		    case NCKEY_LSHIFT: case NCKEY_RSHIFT: kc = KS_SHIFT; break;
-		    case NCKEY_LCTRL:  case NCKEY_RCTRL:  kc = KS_CTRL;  break;
-		    case NCKEY_LALT:   case NCKEY_RALT:   kc = KS_ALT;   break;
-		    default: kc = 0;
-		    }
-		    if (kc)
-		    {
-			if (ni.evtype == NCTYPE_RELEASE) shift_status &= ~kc;
-			else			   shift_status |= kc;
-			ret(KE_SHIFTKEYS);
-		    }
-		    if (ni.evtype == NCTYPE_RELEASE) continue;
-		    if (ni.id >= NCKEY_BUTTON1 && ni.id <= NCKEY_BUTTON3)
-		    {
-			if (ni.evtype != NCTYPE_RELEASE)
-			{
-			    mouse.x = ni.x; mouse.y = ni.y;
-			    mouse.pressed = 1;
-			    if (ni.id == NCKEY_BUTTON1) mouse.buttons |= MS_LEFTPRESS;
-			    if (ni.id == NCKEY_BUTTON2) mouse.buttons |= MS_MIDDLEPRESS;
-			    if (ni.id == NCKEY_BUTTON3) mouse.buttons |= MS_RIGHTPRESS;
-			    ret(KE_MOUSE);
-			}
-			continue;
-		    }
-		    kc = map_nc_input(&ni);
-		    if (!kc) continue;
-		    key = kc;
-		    if(rawkb_mode) { rawkb_buf[0]=(unsigned char)ni.id; rawkb_len=1; }
-		    goto place_key;
-		}
 #ifdef HAVE_NCURSES
-		/* when ncurses owns key decoding, nc's queue only carries
-		   signal-driven events (resize) — fall through */
-		if (!nc_scr)
-#endif
-		return;
-	    }
-#endif
-#ifdef HAVE_NCURSES
-	    if (nc_scr)
+	    if (biew_scr)
 	    {
 		int ch;
 		while ((ch = getch()) != ERR)
@@ -724,189 +435,12 @@ void __FASTCALL__ ReadNextEvent(void)
 	    }
 #endif
 
-#ifndef HAVE_NOTCURSES
-	    if (get(c[0]) < 0) return;
 
-	    switch(c[0]) {
-		case KE_ESCAPE		: break;
-		case KE_STATUS_RESET	: if(!rawkb_mode) {set_s(0); } else { rawkb_mode=0; return; }
-		case KE_STATUS_ALT	: if(!rawkb_mode) {set_s(KS_ALT); } else { rawkb_mode=0; return; }
-		case KE_STATUS_SHIFT	: if(!rawkb_mode) {set_s(KS_SHIFT); } else { rawkb_mode=0; return; }
-		case KE_STATUS_CONTROL	: if(!rawkb_mode) {set_s(KS_CTRL); } else { rawkb_mode=0; return; }
-		case 0			: break_status = True; break;
-		case KE_ENTER2		: key = KE_ENTER; break;
-		case KE_BKSPACE2	: key = KE_BKSPACE; break;
-		case KE_C_O		: key = KE_CTL_(O); break;
-		default			: key = c[0];
-	    }
-	    if (key)
-	    {
-		if(rawkb_mode)
-		{
-		    rawkb_buf[0]=c[0];
-		    rawkb_len=1;
-		}
-		goto place_key;
-	    }
-	    for (i = 1; i < SEQ_LEN - 1; i++) {
-		if(getwait(&c[i]) < 0) break;
-	    }
-	    if(rawkb_mode)
-	    {
-		memcpy(rawkb_buf,c,i);
-		rawkb_len=i;
-	    }
-	    if (i < 3) {
-		/* ESC + printable char is the terminal's Meta/Alt prefix
-		   (Alt-g arrives as ESC 'g'); a lone ESC stays a lone ESC */
-		if (i == 2 && c[1] > ' ') key = c[1] | ADD_ALT;
-		else key = c[0];
-		goto place_key;
-	    }
-
-	    /* Meta/Alt prefix on a full sequence (Alt-F1 arrives as
-	       ESC ESC O P or ESC ESC [ 11 ~): unwrap and tag it */
-	    if (c[1] == KE_ESCAPE)
-	    {
-		memmove(&c[1], &c[2], i - 2);
-		i--;
-		alt_prefix = 1;
-	    }
-
-    if (c[1] == '[' && c[2] == 'M' && i == 6) {
-	switch (c[3] & 0x03) {
-	    case 0: mouse.buttons |= MS_LEFTPRESS; break;
-	    case 1: mouse.buttons |= MS_MIDDLEPRESS; break;
-	    case 2: mouse.buttons |= MS_RIGHTPRESS; break;
-	    default: mouse.pressed = 0; return;
-	}
-	mouse.x = c[4] - '!';
-	mouse.y = c[5] - '!';
-	mouse.pressed = 1;
-	key = KE_MOUSE;
-#ifdef	DEBUG
-	printm("mouse at %02X, %02X - %02X\n", mouse.x, mouse.y, mouse.buttons);
-#endif
-	goto place_key;
-    }
-
-/*
-    translate escape sequence
-*/
-
-    /*
-       xterm/modern terminal modifier form: ESC [ <num> ; <mod> <final>
-       where mod: 2=Shift 3=Alt 4=Shift+Alt 5=Ctrl 6=Shift+Ctrl
-                  7=Alt+Ctrl 8=Shift+Alt+Ctrl
-    */
-    if (!key && (c[1] == '[' || c[1] == 'O'))
-    {
-	int j;
-	for (j = 2; j < i && c[j] != ';'; j++) ;
-	if (j < i)
-	{
-	    int num = 0, mod = 0, base = 0;
-	    int k;
-	    for (k = 2; k < j; k++)
-		if (c[k] >= '0' && c[k] <= '9') num = num * 10 + (c[k] - '0');
-	    for (k = j + 1; k < i - 1; k++)
-		if (c[k] >= '0' && c[k] <= '9') mod = mod * 10 + (c[k] - '0');
-	    mod--;	/* modifier param is 1 + bitmask */
-	    if (mod >= 0 && mod <= 7)
-	    {
-		switch (c[i - 1])
-		{
-		    case '~':
-			switch (num)
-			{
-			    case 11: base = KE_F(1); break;
-			    case 12: base = KE_F(2); break;
-			    case 13: base = KE_F(3); break;
-			    case 14: base = KE_F(4); break;
-			    case 15: base = KE_F(5); break;
-			    case 17: base = KE_F(6); break;
-			    case 18: base = KE_F(7); break;
-			    case 19: base = KE_F(8); break;
-			    case 20: base = KE_F(9); break;
-			    case 21: base = KE_F(10); break;
-			    case 23: base = KE_F(11); break;
-			    case 24: base = KE_F(12); break;
-			    case 2:  base = KE_INS; break;
-			    case 3:  base = KE_DEL; break;
-			    case 5:  base = KE_PGUP; break;
-			    case 6:  base = KE_PGDN; break;
-			    case 7:  base = KE_HOME; break;
-			    case 8:  base = KE_END; break;
-			}
-			break;
-		    case 'P': base = (num <= 1) ? KE_F(1) : 0; break;
-		    case 'Q': base = (num <= 1) ? KE_F(2) : 0; break;
-		    case 'R': base = (num <= 1) ? KE_F(3) : 0; break;
-		    case 'S': base = (num <= 1) ? KE_F(4) : 0; break;
-		    case 'A': base = (num <= 1) ? KE_UPARROW : 0; break;
-		    case 'B': base = (num <= 1) ? KE_DOWNARROW : 0; break;
-		    case 'C': base = (num <= 1) ? KE_RIGHTARROW : 0; break;
-		    case 'D': base = (num <= 1) ? KE_LEFTARROW : 0; break;
-		    case 'H': base = (num <= 1) ? KE_HOME : 0; break;
-		    case 'F': base = (num <= 1) ? KE_END : 0; break;
-		}
-		if (base)
-		{
-		    key = base;
-		    if (mod & 1) key |= ADD_SHIFT;
-		    if (mod & 2) key |= ADD_ALT;
-		    if (mod & 4) key |= ADD_CONTROL;
-		}
-	    }
-	}
-	else if (c[1] == 'O' && i == 4 && c[2] >= '2' && c[2] <= '8')
-	{
-	    /* SS3-with-modifier: ESC O <mod> P/Q/R/S (some terminals
-	       send Ctrl-F1 as ESC O 5 P rather than ESC [ 1 ; 5 P) */
-	    int mod = c[2] - '0' - 1;
-	    int base = 0;
-	    switch (c[3])
-	    {
-		case 'P': base = KE_F(1); break;
-		case 'Q': base = KE_F(2); break;
-		case 'R': base = KE_F(3); break;
-		case 'S': base = KE_F(4); break;
-	    }
-	    if (base)
-	    {
-		key = base;
-		if (mod & 1) key |= ADD_SHIFT;
-		if (mod & 2) key |= ADD_ALT;
-		if (mod & 4) key |= ADD_CONTROL;
-	    }
-	}
-    }
-
-#define S S[i]
-	    for (i = 0; i < SEQ_NUM && !key; i++) {
-		int j, n;
-
-		if (c[1] != S.pre1) continue;
-		n = 2;
-		if (S.pre2) {
-		    if (c[n] != S.pre2) continue;
-		    n++;
-		}
-		for (j = 0; S.s[j]->c; j++) if (S.s[j]->c == c[n]) {
-			if (!(S.suf && S.suf != c[n + 1])) {
-			    key = S.s[j]->key; break;
-			 }
-	        }
-	    }
-#undef S
-#endif /* HAVE_NOTCURSES */
 	}
 c_end:
-	if (alt_prefix && key) key |= ADD_ALT;
 place_key:
 	if(!rawkb_mode) { ret(key); }
 	else { rawkb_escape=(key==KE_ESCAPE&&rawkb_len==1); rawkb_mode=0; }
-#undef set_s
 #undef ret
 }
 
@@ -1007,13 +541,9 @@ void __FASTCALL__ __init_keyboard(const char *user_cp)
 
     /* O_ASYNC without F_SETOWN signals the tty's foreground process
        group, killing any process that shares it (e.g. a parent that
-       spawned us); claim the fd first so SIGIO reaches only us.
-       Cosmopolitan's F_SETOWN is a userspace stub that never reaches
-       the kernel, so async input is disabled there and polled. */
-#ifndef	__COSMOPOLITAN__
+       spawned us); claim the fd first so SIGIO reaches only us. */
     if (fcntl(in_fd, F_SETOWN, getpid()) == 0)
 	mode |= O_ASYNC;
-#endif
 
     if (fcntl(in_fd, F_SETFL, fcntl(in_fd, F_GETFL) | mode) < 0)
     {
@@ -1038,46 +568,17 @@ void __FASTCALL__ __init_keyboard(const char *user_cp)
 	on_console = 0;
     }
 
-#ifdef HAVE_NOTCURSES
-    if (biew_nc) {
-	/* Terminal-query replies that arrived after notcurses_init's
-	   waits expired are buffered as input events — drain them or a
-	   leading ESC decodes as quit.  A real keypress during init is
-	   dropped here too (same as the termios flush would do). */
-	ncinput nini;
-	int quiet = 0;
-	while (quiet < 200) {	/* ~20 ms of quiet before we trust it */
-	    int got = 0;
-	    while (notcurses_get_nblock(biew_nc, &nini)) got = 1;
-	    if (got) quiet = 0; else quiet++;
-	    if (!got) __OsYield();
-	}
-    }
-#endif
-
 #ifdef HAVE_NCURSES
-    if (!on_console
-#if defined(HAVE_NOTCURSES)
-	&& !(biew_nc && __kbdKittyTerm()) /* kitty CSI-u needs nc's decoder */
-#endif
-	)
+    if (!on_console && biew_scr)
     {
-	/* ncurses owns key decoding on non-console terminals: its
-	   fifo completes escape sequences split across reads and its
-	   ESCDELAY wait distinguishes a lone ESC from a sequence.
-	   Output stays with the twin layer, so curses gets /dev/null
-	   for output and a dup of the tty fd for input (fd 0 itself is
-	   handed to notcurses' idle input thread below). */
-	nc_devnull = fopen("/dev/null","w");
-	nc_ttyin = fdopen(dup(in_fd), "r");
-	if (nc_devnull && nc_ttyin)
-	    nc_scr = newterm(NULL,nc_devnull,nc_ttyin);
-	if (nc_scr)
-	{
+	/* biew_scr was created by __init_vio; here we only put it into
+	   key-input mode.  Its fifo completes escape sequences split
+	   across reads and its ESCDELAY wait distinguishes a lone ESC
+	   from a sequence. */
 	    static const int fbnum[12] = { 1,1,1,1,15,17,18,19,20,21,23,24 };
 	    static const char flet[4] = "PQRS";
 	    int f,m;
-	    set_term(nc_scr);
+	    set_term(biew_scr);
 	    cbreak(); noecho(); nonl();
 	    intrflush(stdscr,FALSE);
 	    keypad(stdscr,TRUE);
@@ -1104,9 +605,8 @@ void __FASTCALL__ __init_keyboard(const char *user_cp)
 		    else	snprintf(sq,sizeof(sq),"\033[%d;%d~",fbnum[f],m);
 		    if (!key_defined(sq)) define_key(sq,kc);
 		}
-	    /* curses' output goes to /dev/null, so keypad()'s smkx never
-	       reaches the terminal and arrows/home/end keep arriving in
-	       normal (CSI) mode — bind both forms explicitly. */
+	    /* arrows/home/end can arrive in either CSI or SS3 form
+	       depending on application mode — bind both explicitly. */
 	    static const char *nav[8][2] = {
 		{ "\033[A", "\033OA" }, { "\033[B", "\033OB" },
 		{ "\033[C", "\033OC" }, { "\033[D", "\033OD" },
@@ -1120,31 +620,6 @@ void __FASTCALL__ __init_keyboard(const char *user_cp)
 	    for (f = 0; f < 8; f++)
 		for (m = 0; m < 2; m++)
 		    if (!key_defined(nav[f][m])) define_key(nav[f][m],navkey[f]);
-	}
-	else
-	{
-	    if (nc_devnull) { fclose(nc_devnull); nc_devnull = NULL; }
-	    if (nc_ttyin) { fclose(nc_ttyin); nc_ttyin = NULL; }
-	}
-    }
-#endif
-
-#if defined(HAVE_NOTCURSES) && defined(HAVE_NCURSES)
-    if (biew_nc && nc_scr)
-    {
-	/* ncurses owns the real tty input now.  notcurses' input thread
-	   polls fd 0; move it to an empty pipe so the two libraries
-	   never race on the same byte stream.  nc keeps rendering on
-	   stdout and still gets signal-generated NCKEY_RESIZE through
-	   its internal pipes. */
-	static int nc_stdin_wfd;
-	int pfd[2];
-	if (pipe(pfd) == 0)
-	{
-	    dup2(pfd[0], 0);
-	    close(pfd[0]);
-	    nc_stdin_wfd = pfd[1];	/* keep open: EOF would spin nc's reader */
-	}
     }
 #endif
 
@@ -1197,17 +672,6 @@ void __FASTCALL__ __term_keyboard(void)
 {
 #ifdef HAVE_ICONV
     nls_term(nls_handle);
-#endif
-#ifdef HAVE_NCURSES
-    if (nc_scr)
-    {
-	mousemask(0,NULL);
-	endwin();
-	delscreen(nc_scr);
-	nc_scr = NULL;
-	if (nc_devnull) { fclose(nc_devnull); nc_devnull = NULL; }
-	if (nc_ttyin) { fclose(nc_ttyin); nc_ttyin = NULL; }
-    }
 #endif
     if (on_console) ioctl(in_fd, KDSKBMODE, K_XLATE);
     tcsetattr(in_fd, TCSANOW, &sattr);

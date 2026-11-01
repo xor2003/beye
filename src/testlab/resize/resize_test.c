@@ -195,8 +195,9 @@ int main(void)
 	close(mfd);
     }
 
-    /* TERM=dumb: notcurses_init fails fast -> ANSI path, no query waits */
-    setenv("TERM", "dumb", 1);
+    /* TERM=vt100: biew accepts it and ncurses' vt100 entry emits no
+       cursor-position query at init, so the drainer never has to reply */
+    setenv("TERM", "vt100", 1);
     __init_sys();          /* sets `terminal` global used by __init_vio */
     twInit(NULL, 0, 0);
 

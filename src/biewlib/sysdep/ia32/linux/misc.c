@@ -32,8 +32,8 @@ int __FASTCALL__ __inputRawInfo(char *head, char *text)
     rawkb_escape=0;
     rawkb_len=0;
     rawkb_mode=1;
-    /* SIGIO only pumps ReadNextEvent for the hand parser; under
-       ncurses/notcurses input is drained by whoever waits on it */
+    /* ncurses input is drained by whoever waits on it (getch polls
+       its own fifo), so pump it here while waiting for the key */
     while(rawkb_mode) { usleep(0); if(termlib_input()) ReadNextEvent(); }
     for(i=0;i<rawkb_len;i++)
     {

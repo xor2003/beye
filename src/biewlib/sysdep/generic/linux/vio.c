@@ -42,7 +42,7 @@ static const char rcs_id[] = "$Id: vio.c,v 1.18 2009/09/03 16:57:40 nickols_k Ex
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/ioctl.h>
-#if defined(__linux__) && !defined(__COSMOPOLITAN__)
+#if defined(__linux__)
 #include <sys/vt.h>
 #define HAVE_SYS_VT_H 1
 #endif
@@ -71,35 +71,26 @@ static unsigned char __ansi_color[8] = {0,4,2,6,1,5,3,7};
 static tAbsCoord saveX, saveY, firstX, firstY;
 static int cursor_type = __TVIO_CUR_NORM;
 static int viohandle, out_fd, initialized;
-#ifndef HAVE_NOTCURSES
-static int output_G1 = 0, no_frames = 0;
-#endif
 
 static unsigned violen;
 static unsigned char *viomem;
-static char *vtmp;
-
-#ifndef HAVE_NOTCURSES
-static unsigned char frames_vt100[0x30] =
-"aaaxuuukkuxkjjjkmvwtqnttmlvwtqnvvwwmmllnnjl00000";
 
 static unsigned char frames_dumb[0x30] =
 ": %|{+++++|+++++`++}-++++++++-+++++++++++++#%[]~";
-#endif
 
 static char *screen_cp;
 static unsigned is_unicode=0;
 
 static void *nls_handle;
 
-#ifdef HAVE_NOTCURSES
-#include <notcurses/notcurses.h>
+#ifdef HAVE_NCURSES
+#include <curses.h>
+#include <locale.h>
 
-/* notcurses owns both rasterization (here) and input decoding
+/* ncurses owns both rasterization (here) and input decoding
    (keyboard.c) on non-console terminals.  Init failure is fatal:
    this build has no direct-ANSI fallback. */
-struct notcurses *biew_nc = NULL;
-static struct ncplane *nc_stdp = NULL;
+SCREEN *biew_scr = NULL;
 
 /* CP437/DOS pseudographics 0xb0-0xdf (_PSMIN.._PSMAX) -> UTF-8 */
 static const char *nc_ps437[0x30] = {
@@ -117,9 +108,8 @@ static const char *nc_ps437[0x30] = {
     "\xe2\x96\x84","\xe2\x96\x8c","\xe2\x96\x90","\xe2\x96\x80"
 };
 
-/* VGA palette (DOS attrs -> real colors). Palette indices are unusable:
-   on terminfos without setaf>7 entries notcurses emits invalid SGR codes.
-   Blue is darker than stock VGA — terminals render 0xaa too brightly. */
+/* VGA palette (DOS attrs -> real colors).  Blue is darker than stock
+   VGA — terminals render 0xaa too brightly. */
 static const struct { unsigned char r, g, b; } nc_vga[16] = {
     {0x00,0x00,0x00},{0xaa,0x00,0x00},{0x00,0xaa,0x00},{0xaa,0x55,0x00},
     {0x00,0x00,0x87},{0xaa,0x00,0xaa},{0x00,0xaa,0xaa},{0xaa,0xaa,0xaa},
@@ -127,80 +117,130 @@ static const struct { unsigned char r, g, b; } nc_vga[16] = {
     {0xff,0x55,0x55},{0xff,0x55,0xff},{0xff,0xff,0x55},{0xff,0xff,0xff}
 };
 
+/* resolved curses color index for each nc_vga palette entry */
+static int _ccolor[16];
+/* when COLOR_PAIRS can't hold 16x16 combos, backgrounds quantize to 8 */
+static int full_pairs;
+
+static int __NEAR__ __FASTCALL__ vio_pair(int fg, int bg)
+{
+    /* pair numbers: bg 0..15 -> 1 + fg + 16*(bg+1); bg -1 (transparent)
+       -> 1 + fg + 16*17 = 273 + fg... laid out as 17 blocks of 16:
+       index = 1 + fg + 16 * (bg + 1), bg in -1..15 -> pair 1..272 */
+    if (!full_pairs && bg > 7) bg &= 7;
+    return 1 + fg + ((bg + 1) << 4);
+}
+
+/* ACS pseudographics for non-UTF-8 terminals */
+static chtype __FASTCALL__ _2ps(unsigned char c)
+{
+#define	ret(x) return(x)
+    switch (c) {
+	case BAR0:	ret(ACS_CKBOARD);
+	case BAR1:	ret(ACS_CKBOARD);
+	case BAR2:	ret(ACS_CKBOARD);
+	case VSLINE:	ret(ACS_VLINE);
+	case RSSTEE:	ret(ACS_RTEE);
+	case RSDTEE:	ret(ACS_RTEE);
+	case RDSTEE:	ret(ACS_RTEE);
+        case TRSDCR:	ret(ACS_URCORNER);
+        case TRDSCR:	ret(ACS_URCORNER);
+        case RDDTEE:	ret(ACS_RTEE);
+        case VDLINE:	ret(ACS_VLINE);
+        case TRDDCR:	ret(ACS_URCORNER);
+        case LRDDCR:	ret(ACS_LRCORNER);
+        case LRSDCR:	ret(ACS_LRCORNER);
+        case LRDSCR:	ret(ACS_LRCORNER);
+        case TRSSCR:	ret(ACS_URCORNER);
+        case LLSSCR:	ret(ACS_LLCORNER);
+        case BSSTEE:	ret(ACS_BTEE);
+        case TSSTEE:	ret(ACS_TTEE);
+        case LSSTEE:	ret(ACS_LTEE);
+        case HSLINE:	ret(ACS_HLINE);
+        case SSPLUS:	ret(ACS_PLUS);
+        case LSDTEE:	ret(ACS_LTEE);
+        case LDSTEE:	ret(ACS_LTEE);
+        case LLDDCR:	ret(ACS_LLCORNER);
+        case TLDDCR:	ret(ACS_ULCORNER);
+        case BDDTEE:	ret(ACS_BTEE);
+        case TDDTEE:	ret(ACS_TTEE);
+        case LDDTEE:	ret(ACS_LTEE);
+        case HDLINE:	ret(ACS_HLINE);
+        case DDPLUS:	ret(ACS_PLUS);
+        case BDSTEE:	ret(ACS_BTEE);
+        case BSDTEE:	ret(ACS_BTEE);
+        case TDSTEE:	ret(ACS_TTEE);
+        case TSDTEE:	ret(ACS_TTEE);
+        case BLDSCR:	ret(ACS_LLCORNER);
+        case BLSDCR:	ret(ACS_LLCORNER);
+        case TLSDCR:	ret(ACS_ULCORNER);
+        case TLDSCR:	ret(ACS_ULCORNER);
+        case SDPLUS:	ret(ACS_PLUS);
+        case DSPLUS:	ret(ACS_PLUS);
+        case BRSSCR:	ret(ACS_LRCORNER);
+        case TLSSCR:	ret(ACS_ULCORNER);
+        case DBLK:	ret(ACS_BLOCK);
+        case BBLK:	ret(ACS_BLOCK);
+        case LBLK:	ret(ACS_BLOCK);
+        case RBLK:	ret(ACS_BLOCK);
+        case TBLK:	ret(ACS_BLOCK);
+    }
+    ret(0);
+#undef ret
+}
+
+/* nearest index in the xterm 256 palette (basic 16 + 6x6x6 cube + gray
+   ramp) for terminals that can't redefine colors */
+static int __NEAR__ __FASTCALL__ vio_nearest256(int r, int g, int b)
+{
+    static const unsigned char base[16][3] = {
+	{0,0,0},{170,0,0},{0,170,0},{170,85,0},
+	{0,0,170},{170,0,170},{0,170,170},{170,170,170},
+	{85,85,85},{85,85,255},{85,255,85},{85,255,255},
+	{255,85,85},{255,85,255},{255,255,85},{255,255,255}
+    };
+    static const unsigned char cube[6] = {0,95,135,175,215,255};
+    int best = -1; long bd = 0x7fffffff;
+    int i, j, k;
+    for (i = 0; i < 16; i++) {
+	long d = (long)(base[i][0]-r)*(base[i][0]-r)
+	       + (long)(base[i][1]-g)*(base[i][1]-g)
+	       + (long)(base[i][2]-b)*(base[i][2]-b);
+	if (d < bd) { bd = d; best = i; }
+    }
+    for (i = 0; i < 6; i++) for (j = 0; j < 6; j++) for (k = 0; k < 6; k++) {
+	long d = (long)(cube[i]-r)*(cube[i]-r)
+	       + (long)(cube[j]-g)*(cube[j]-g)
+	       + (long)(cube[k]-b)*(cube[k]-b);
+	if (d < bd) { bd = d; best = 16 + i*36 + j*6 + k; }
+    }
+    for (i = 0; i < 24; i++) {
+	int gv = 8 + i*10;
+	long d = (long)(gv-r)*(gv-r) + (long)(gv-g)*(gv-g) + (long)(gv-b)*(gv-b);
+	if (d < bd) { bd = d; best = 232 + i; }
+    }
+    return best;
+}
 #endif
 
 
-#ifndef HAVE_NOTCURSES
-#define twrite(x)	write(out_fd, (x), strlen(x))
-#endif
 #define _addr(x, y)	(viomem + (x) + (y) * tvioWidth)
 #define _bg(x)		((x) >> 4)
 #define _fg(x)		((x) & 0x0f)
 #define _2color(x)	__Xlat__(__ansi_color, (x) & 7)
 /* #define _2color(x) (char)__ansi_color[((x) & 7)] */
 
-#ifndef HAVE_NOTCURSES
-#define VT100_CLEARSCREEN	"\033[2J"
-#define VT100_CLEARLINE		"\033[2K"
-#define VT100_NORMALCHARS	"\033[0m"
-#define VT100_BOLDCHARS		"\033[1m"
-#define VT100_UNDERLINECHARS	"\033[1m"
-#define VT100_MODE80		"\033[?3h"
-#define VT100_MODE132		"\033[?3l"
-
-#define VT100_SET_CHARSET_UK_G0		"\033(A"
-#define VT100_SET_CHARSET_UK_G1		"\033)A"
-#define VT100_SET_CHARSET_US_G0		"\033(B"
-#define VT100_SET_CHARSET_US_G1		"\033)B"
-#define VT100_SET_CHARSET_GR_G0		"\033(0"
-#define VT100_SET_CHARSET_GR_G1		"\033)0"
-#define VT100_SET_CHARSET_ROM_G0	"\033(1"
-#define VT100_SET_CHARSET_ROM_G1	"\033)1"
-#define VT100_SET_CHARSET_SPEC_GR_G0	"\033(2"
-#define VT100_SET_CHARSET_SPEC_GR_G1	"\033)2"
-#endif
-
 static struct {
     unsigned char last;
     unsigned char color[0x10];
 } tp = { 0, {0} };
 
-#ifdef HAVE_NOTCURSES
-static int __NEAR__ __FASTCALL__ nc_is_transp(int bg)
+#ifdef HAVE_NCURSES
+static int __NEAR__ __FASTCALL__ is_transp(int bg)
 {
     int i;
     for (i = 0; i < tp.last; i++) if (bg == tp.color[i]) return 1;
     return 0;
-}
-#endif
-
-#ifndef HAVE_NOTCURSES
-static char *__FASTCALL__ _2ansi(unsigned char attr)
-{
-    int bg = _bg(attr);
-    int bc = _2color(bg);
-    char bgb[12];
-
-    if (transparent) {
-	int i;
-	for (i = 0; i < tp.last; i++)
-	    if (bg == tp.color[i]) bc = 9;
-    }
-
-    /* terminals render ANSI blue4 far brighter than DOS VGA blue;
-       a 256-color navy is much closer (bg==1 only, not bright bg) */
-    if (bc == 9) strcpy(bgb, "49");
-    else if (bg == 1) strcpy(bgb, "48;5;18");
-    else	 sprintf(bgb, "4%d", bc);
-
-    sprintf(vtmp,
-	"\033[%d;3%d;%s%sm",
-	_fg(attr) > 7,
-	_2color(_fg(attr) & 7),
-	bgb,
-	bg > 7 ? ";5" : ""
-    );
-    return vtmp;
 }
 #endif
 
@@ -220,14 +260,6 @@ inline static int __FASTCALL__ printable(unsigned char c)
     return result;
 }
 
-#ifndef HAVE_NOTCURSES
-static void __FASTCALL__ gotoxy(tAbsCoord x, tAbsCoord y)
-{
-    sprintf(vtmp,"\033[%d;%dH", (unsigned)(y + 1), (unsigned)(x + 1));
-    twrite(vtmp);
-}
-#endif
-
 int __FASTCALL__ __vioGetCursorType( void )
 {
     return cursor_type;
@@ -236,20 +268,15 @@ int __FASTCALL__ __vioGetCursorType( void )
 void __FASTCALL__ __vioSetCursorType(int type)
 {
     cursor_type = type;
-#ifdef HAVE_NOTCURSES
-    if (biew_nc) {
-	if (type == __TVIO_CUR_OFF) notcurses_cursor_disable(biew_nc);
-	else notcurses_cursor_enable(biew_nc, saveY, saveX);
+#ifdef HAVE_NCURSES
+    if (biew_scr) {
+	/* ncurses: 0 hidden, 1 normal, 2 very-visible — close enough
+	   to OFF/NORM/SOLID */
+	curs_set(type == __TVIO_CUR_OFF ? 0 :
+		 type == __TVIO_CUR_SOLID ? 2 : 1);
     }
     /* on_console has no cursor-shape control via vcsa: the kernel
        cursor stays at its default */
-#else
-    if	(terminal->type == TERM_LINUX && (cursor_type == __TVIO_CUR_SOLID || type == __TVIO_CUR_SOLID)) {
-	sprintf(vtmp,"\033[?%dc", type == __TVIO_CUR_SOLID ? 7 : 0);
-	twrite(vtmp);
-    }
-    sprintf(vtmp,"\033[?25%c", type ? 'h' : 'l');
-    twrite(vtmp);
 #endif
 }
 
@@ -263,18 +290,17 @@ void __FASTCALL__ __vioSetCursorPos(tAbsCoord x, tAbsCoord y)
 {
     saveX = x;
     saveY = y;
-#ifdef HAVE_NOTCURSES
-    if (biew_nc) {
-	if (cursor_type != __TVIO_CUR_OFF) notcurses_cursor_enable(biew_nc, y, x);
-    } else if (on_console) {
+#ifdef HAVE_NCURSES
+    if (biew_scr) {
+	if (cursor_type != __TVIO_CUR_OFF) { move(y, x); refresh(); }
+    } else
+#endif
+    if (on_console) {
 	/* vcsa[0..3] = rows,cols,cursor x,cursor y: move the kernel
 	   cursor through the console API, not an escape sequence */
 	unsigned char pos[2] = { (unsigned char)x, (unsigned char)y };
 	PWRITE(viohandle, pos, 2, 2);
     }
-#else
-    gotoxy(x, y);
-#endif
 }
 
 void __FASTCALL__ __vioReadBuff(tAbsCoord x, tAbsCoord y, tvioBuff *buff, unsigned len)
@@ -289,19 +315,12 @@ void __FASTCALL__ __vioReadBuff(tAbsCoord x, tAbsCoord y, tvioBuff *buff, unsign
 void __FASTCALL__ __vioWriteBuff(tAbsCoord x, tAbsCoord y, const tvioBuff *buff, unsigned len)
 {
 #define	LEN(x) (x << 4)
-    unsigned char cache_pb[LEN(VMAX_X)];
-    unsigned char *pb, *addr;
-#ifndef HAVE_NOTCURSES
-    unsigned char *dpb;
+    unsigned char *addr;
+#ifdef HAVE_NCURSES
+    unsigned i;
 #endif
 
 /*    if (!len) return; */
-
-    pb = len > VMAX_X ? malloc(LEN(len)) : cache_pb;
-    if (pb == NULL) {
-	printm("Memory allocation failed: %s\nExiting..", strerror(errno));
-	exit(errno);
-    }
 
     addr = _addr(x, y);
 
@@ -309,9 +328,8 @@ void __FASTCALL__ __vioWriteBuff(tAbsCoord x, tAbsCoord y, const tvioBuff *buff,
     memcpy(addr + violen, buff->chars, len);
     memcpy(addr + (violen << 1), buff->oem_pg, len);
 
-#ifdef HAVE_NOTCURSES
-    if (biew_nc) {
-	unsigned i;
+#ifdef HAVE_NCURSES
+    if (biew_scr) {
 	for (i = 0; i < len; i++) {
 	    unsigned linear = x + i;
 	    unsigned cy = y + linear / tvioWidth;
@@ -319,126 +337,48 @@ void __FASTCALL__ __vioWriteBuff(tAbsCoord x, tAbsCoord y, const tvioBuff *buff,
 	    unsigned char c  = buff->chars[i];
 	    unsigned char ca = buff->attrs[i];
 	    unsigned char cp = buff->oem_pg[i];
-	    const char *egc = " ";
-	    char utf[8];
 	    int fg = _2color(ca & 7) | ((ca & 8) ? 8 : 0);
 	    int bg = _2color(_bg(ca) & 7) | ((ca & 0x80) ? 8 : 0);
+	    short pr = (short)vio_pair(fg, is_transp(_bg(ca)) ? -1 : bg);
 
+	    wmove(stdscr, (int)cy, (int)cx);
+	    wattr_set(stdscr, A_NORMAL, pr, NULL);
+	    if (COLORS < 16) {
+		if (fg > 7) wattron(stdscr, A_BOLD);
+		if (bg > 7) wattron(stdscr, A_BLINK);
+	    }
 	    if (c && printable(c)) {
 		if (cp >= _PSMIN && cp <= _PSMAX) {
-		    egc = nc_ps437[cp - _PSMIN];
-		} else {
+		    if (output_7) waddch(stdscr, frames_dumb[cp - _PSMIN]);
+		    else if (is_unicode) waddstr(stdscr, nc_ps437[cp - _PSMIN]);
+		    else waddch(stdscr, _2ps(cp));
+		} else if (is_unicode) {
 		    unsigned l = 1;
 		    char *destb = nls_recode2screen_cp(nls_handle, &c, &l);
-		    if (destb) {
-			if (l > sizeof(utf) - 1) l = sizeof(utf) - 1;
-			memcpy(utf, destb, l); utf[l] = 0;
-			free(destb);
-			egc = utf;
-		    }
-		}
-	    } else if (c) egc = ".";
-	    ncplane_set_fg_rgb8(nc_stdp, nc_vga[fg].r, nc_vga[fg].g, nc_vga[fg].b);
-	    if (nc_is_transp(_bg(ca))) ncplane_set_bg_default(nc_stdp);
-	    else ncplane_set_bg_rgb8(nc_stdp, nc_vga[bg].r, nc_vga[bg].g, nc_vga[bg].b);
-	    ncplane_putegc_yx(nc_stdp, cy, cx, egc, NULL);
+		    if (destb) { waddstr(stdscr, destb); free(destb); }
+		    else waddch(stdscr, c);
+		} else waddch(stdscr, c);
+	    } else if (c) waddch(stdscr, '.');
+	    else waddch(stdscr, ' ');
 	}
-	notcurses_render(biew_nc);
+	move(saveY, saveX);
+	refresh();
     } else
 #endif
     if (on_console) {
+	unsigned char cache_pb[LEN(VMAX_X)];
+	unsigned char *pb = len > VMAX_X ? malloc(LEN(len)) : cache_pb;
 
+	if (pb == NULL) {
+	    printm("Memory allocation failed: %s\nExiting..", strerror(errno));
+	    exit(errno);
+	}
         __INTERLEAVE_BUFFERS(len, pb, buff->chars, buff->attrs);
 
 	PWRITE(viohandle, pb, len << 1, 4 + ((x + y * tvioWidth) << 1));
-
+	if (pb != cache_pb) free(pb);
     }
-#ifndef HAVE_NOTCURSES
-    else {
-	unsigned i;
-	unsigned char c,slen;
-	unsigned mode = 0, old_mode = -1;
-	tAbsCoord xx, yy;
-
-	__vioGetCursorPos(&xx, &yy);
-
-	gotoxy(x, y);
-
-	dpb=pb;
-	memset(pb, 0, LEN(len));
-
-	for (i = 0; i < len; i++) {
-	    c = buff->chars[i];
-#define cp buff->oem_pg[i]
-#define ca buff->attrs[i]
-
-	    if (cp && cp >= _PSMIN && cp <= _PSMAX && !is_unicode) {
-		c = (output_7 || no_frames) ? __Xlat__(frames_dumb,cp - _PSMIN) :
-		    (output_G1)	? __Xlat__(frames_vt100,cp - _PSMIN) : cp;
-/*
-		c = (output_7)	? frames_dumb[cp - _PSMIN] :
-		    (output_G1)	? frames_vt100[cp - _PSMIN] : cp;
-*/
-		mode = 1;
-	    } else {
-		mode = 0;
-	    }
-
-	    if (output_7) {
-		c &= 0x7f;
-	    } else {
-		unsigned char *map = mode ?
-			    (output_G1 ? VT100_SET_CHARSET_GR_G1"\016" : "\033(U"):
-			    (output_G1 ? VT100_SET_CHARSET_US_G1"\017" : "\033(K");
-
-		if (output_G1 && old_mode != mode)
-		{
-		    strcpy(dpb, map);
-		    dpb += strlen(map);
-		}
-		old_mode = mode;
-	    }
-
-	    if (!c) c = ' '; else if (!printable(c)) c = '.';
-
-	    if (!i || (ca != buff->attrs[i - 1])) /* [dBorca] short-circuit */
-	    {
-		unsigned char *ptr;
-		ptr = _2ansi(ca);
-		strcpy(dpb, ptr);
-		dpb += strlen(ptr);
-	    }
-	    if(is_unicode) {
-		unsigned len=1;
-		char *destb=nls_recode2screen_cp(nls_handle,&c,&len);
-		memcpy(dpb,destb,len);
-		free(destb);
-		dpb+=len;
-	    }
-	    else {
-		*dpb=c; dpb++;
-	    }
-	}
-	*dpb=0;
-	/* Note: twRefreshWin() may pass HUGE buffer here.
-	   But some stupid terminals can write only a few KB
-	   per call! So this loop is required as workaround for them */
-	dpb=pb;
-	slen=strlen(dpb);
-	while(slen)
-	{
-	    unsigned stored;
-	    stored = twrite(dpb);
-	    dpb+=stored;
-	    slen-=stored;
-	}
-	gotoxy(xx, yy);
-    }
-#endif
-    if (pb != cache_pb) free(pb);
 #undef	LEN
-#undef	ca
-#undef	cp
 }
 
 void __FASTCALL__ __init_vio(const char *user_cp,unsigned long flags)
@@ -486,41 +426,58 @@ void __FASTCALL__ __init_vio(const char *user_cp,unsigned long flags)
 	ioctl(out_fd, TIOCGWINSZ, &w);
 	tvioWidth = w.ws_col;
 	tvioHeight = w.ws_row;
-#ifdef HAVE_NOTCURSES
+#ifdef HAVE_NCURSES
 	{
-	    notcurses_options nopts;
-	    const char *term_save = NULL;
-	    memset(&nopts, 0, sizeof(nopts));
-	    nopts.flags = NCOPTION_SUPPRESS_BANNERS | NCOPTION_NO_FONT_CHANGES;
 	    /* Konsole advertises TERM=xterm-256color but sends its own
 	       SS3-modified F-key encoding (ESC O <mod> P/Q/R/S for F1-F4),
 	       which the xterm terminfo does not contain, so modified F1-F4
 	       arrive undecoded.  The konsole-256color terminfo maps them;
 	       use it when running under Konsole. */
 	    if ((getenv("KONSOLE_VERSION") || getenv("KONSOLE_DBUS_SERVICE")) &&
-		getenv("TERM") && strcmp(getenv("TERM"), "xterm-256color") == 0) {
-		term_save = getenv("TERM");
+		getenv("TERM") && strcmp(getenv("TERM"), "xterm-256color") == 0)
 		setenv("TERM", "konsole-256color", 1);
-	    }
-	    biew_nc = notcurses_init(&nopts, stdout);
-	    if (!biew_nc && term_save) {
-		setenv("TERM", term_save, 1);	/* no konsole terminfo: retry */
-		biew_nc = notcurses_init(&nopts, stdout);
-	    }
-	    if (!biew_nc) {
+	    setlocale(LC_ALL, "");
+	    biew_scr = newterm(NULL, stdout, stdin);
+	    if (!biew_scr) {
 		printm("Terminal initialization failed: this build requires "
-		       "notcurses (TERM='%s').\nExiting..\n",
+		       "ncurses (TERM='%s').\nExiting..\n",
 		       getenv("TERM") ? getenv("TERM") : "");
 		exit(EXIT_FAILURE);
 	    }
-	    {
-		unsigned ny, nx;
-		nc_stdp = notcurses_stdplane(biew_nc);
-		notcurses_stddim_yx(biew_nc, &ny, &nx);
-		tvioWidth = nx; tvioHeight = ny;
-		notcurses_mice_enable(biew_nc, NCMICE_ALL_EVENTS);
-		is_unicode = 1;
-	    }
+	    set_term(biew_scr);
+	    if (has_colors()) {
+		int i, j;
+		start_color();
+		use_default_colors();
+		/* exact VGA palette where the terminal can redefine
+		   colors; else nearest 256-color index */
+		if (can_change_color() && COLORS >= 32) {
+		    for (i = 0; i < 16; i++) {
+			init_extended_color(16 + i,
+			    nc_vga[i].r * 1000 / 255,
+			    nc_vga[i].g * 1000 / 255,
+			    nc_vga[i].b * 1000 / 255);
+			_ccolor[i] = 16 + i;
+		    }
+		} else if (COLORS >= 256) {
+		    for (i = 0; i < 16; i++)
+			_ccolor[i] = vio_nearest256(nc_vga[i].r, nc_vga[i].g,
+						    nc_vga[i].b);
+		} else {
+		    for (i = 0; i < 16; i++)
+			_ccolor[i] = i & (COLORS - 1) & 7;
+		}
+		full_pairs = (COLOR_PAIRS >= 273);
+		for (j = -1; j < 16; j++) {
+		    int cb = (j < 0) ? -1 : _ccolor[j & 15];
+		    if (!full_pairs && j > 7) continue;
+		    for (i = 0; i < 16; i++)
+			init_extended_pair(1 + i + ((j + 1) << 4),
+					   _ccolor[i], cb);
+		}
+	    } else tvioNumColors = 2;
+	    tvioWidth = COLS;
+	    tvioHeight = LINES;
 	}
 #endif
     }
@@ -541,14 +498,12 @@ void __FASTCALL__ __init_vio(const char *user_cp,unsigned long flags)
     saveY = firstY;
     violen = tvioWidth * tvioHeight;
 
-    vtmp = malloc(VTMP_LEN);
     viomem = malloc((violen << 1) + violen);
-    if (vtmp == NULL || viomem == NULL) {
+    if (viomem == NULL) {
 	printm("Can't allocate memory for output: %s\nExiting..\n", strerror(errno));
 	exit(errno);
     }
     memset(viomem, 0, (violen << 1) + violen);
-    memset(vtmp, 0, VTMP_LEN);
 
     do_nls = 0;		/* disable nls convertion */
 
@@ -566,32 +521,15 @@ void __FASTCALL__ __init_vio(const char *user_cp,unsigned long flags)
 	    free(buf);
 	}
     }
-#ifndef HAVE_NOTCURSES
-    else {
-	twrite(VT100_NORMALCHARS VT100_MODE80);
-	if (terminal->type != TERM_LINUX) {
-	    do_nls = 1;
-	    output_G1 = 1;
-	    if (terminal->type == TERM_XTERM) {
-		twrite("\033[?1000h\033]0;BIEW: Binary vIEWer\007");
-		frames_vt100[0x2B] =
-		frames_vt100[0x2C] =
-		frames_vt100[0x2D] =
-		frames_vt100[0x2E] =
-		frames_vt100[0x2F] = 'a';
-		if (transparent)
-		    twrite("\033(K\033)0");
-	    }
-	} else { char* lang;
-	    if (((lang = getenv("LANG")) != NULL) && 
+#ifdef HAVE_NCURSES
+    else if (biew_scr) {
+	do_nls = 1;
+	{ char* lang;
+	    if (((lang = getenv("LANG")) != NULL) &&
 	        (strncmp(lang, "ru_", 3) == 0) &&
 	        (strcasecmp(lang, "ru_RU.utf8") != 0) &&
 	        (strcasecmp(lang, "ru_UA.utf8") != 0))
-	    {// twrite("\033(K\\033)K");/*set user defined mapping*/
 	      do_nls = 1;
-	      no_frames = 1;
-	    }
-	    else twrite("\033(U");	/* set null mapping */
 	}
     }
 #endif
@@ -615,6 +553,9 @@ void __FASTCALL__ __vioResize(unsigned w, unsigned h)
     tvioWidth = w; tvioHeight = h;
     violen = w * h;
     memset(viomem, 0, violen * 3);
+#ifdef HAVE_NCURSES
+    if (biew_scr) resizeterm((int)h, (int)w);
+#endif
 }
 
 void __FASTCALL__ __term_vio(void)
@@ -622,26 +563,15 @@ void __FASTCALL__ __term_vio(void)
     if (!initialized) return;
 
     __vioSetCursorType(__TVIO_CUR_NORM);
-#ifdef HAVE_NOTCURSES
-    if (biew_nc) { notcurses_stop(biew_nc); biew_nc = NULL; nc_stdp = NULL; }
+#ifdef HAVE_NCURSES
+    if (biew_scr) { endwin(); delscreen(biew_scr); biew_scr = NULL; }
     else
 #endif
-    {
-#ifndef HAVE_NOTCURSES
-	if (!on_console) {
-	    if (terminal->type == TERM_XTERM) twrite("\033[?1001r\033[?1000l");
-	    if (terminal->type != TERM_XTERM || transparent)
-		twrite("\033(K");
-	    twrite(VT100_MODE80 VT100_NORMALCHARS VT100_CLEARSCREEN);
-	}
-#endif
 	__vioSetCursorPos(firstX, firstY);
-    }
 
     nls_term(nls_handle);
     if (on_console) close(viohandle);
 
-    free(vtmp);
     free(viomem);
 
     close(out_fd);

@@ -6,7 +6,7 @@ History: SourceForge CVS (beye) imported to git — see commits back to 2001.
 
 ## Build
 
-Primary build: native gcc + notcurses & ncurses (this is the default):
+Primary build: native gcc + ncurses (this is the default):
 
 ```sh
 cd src
@@ -27,30 +27,26 @@ Data files (hlp/skn/syntax/xlt) resolve via `~/.local/share/biew/` first —
 
 ## Console I/O architecture (native build)
 
-All terminal I/O goes through libraries — no direct ANSI code is compiled
-(`HAVE_NOTCURSES` gates out every `twrite`/escape literal and the raw
-escape-sequence parser; the APE build keeps that code under `#ifndef`).
+All terminal I/O goes through **ncurses** (`SCREEN *biew_scr` created by
+`__init_vio` in `generic/linux/vio.c`) — no direct ANSI code exists.
 
-- **notcurses** renders the screen (`biew_nc` in `vio.c`).
-- **ncurses** decodes keyboard input on the real tty fd (`nc_scr` in
-  `ia32/linux/keyboard.c`): its fifo reassembles split escape sequences and
-  its `ESCDELAY` delivers a lone ESC, which notcurses 3.x standard input
-  mode never emits (a lone ESC is held forever as a possible Alt prefix).
-- After `ncurses` init succeeds, fd 0 is `dup2`'d to an empty pipe so
-  notcurses' input thread and ncurses never race on the same byte stream;
-  nc still gets signal-generated `NCKEY_RESIZE` via its internal pipes.
-- Kitty-keyboard terminals (`kitty`/`ghostty`/`foot`/`wezterm`/`alacritty`/
-  `contour`/`rio` or their env vars) keep notcurses input instead: CSI-u
-  delivers lone ESC plus bare-modifier press/release events used for the
-  modifier legend, and ncurses cannot decode CSI-u.
+- `vio.c` renders each cell with `wattr_set`/`waddch`/`waddstr` over a
+  shadow buffer; CP437 pseudographics map to UTF-8 (`nc_ps437`) or ACS
+  (`_2ps`) on non-UTF-8 terminals; the 16-color VGA palette is installed
+  via `init_extended_color`/`init_extended_pair` (272 pairs = 16 fg ×
+  17 bg incl. transparent), falling back to nearest-256 then 8 colors.
+- `keyboard.c` decodes input on the same screen: `keypad`+`nodelay`+
+  `set_escdelay(25)` reassembles split sequences and delivers a lone
+  ESC; `define_key` binds the full xterm modifier-F matrix plus both
+  CSI and SS3 arrow/nav forms (curses' smkx may never reach the
+  terminal, so normal-mode sequences must decode too).
 - Konsole detection (`KONSOLE_VERSION`/`KONSOLE_DBUS_SERVICE` +
   `TERM=xterm-256color`) swaps TERM to `konsole-256color` before
-  `notcurses_init` — the swap persists so ncurses binds the same
-  SS3-modified F1–F4 encodings (`\EO5P` etc.).
-- Linux VTs use the `on_console`/vcsa path (kernel console API, unchanged).
-
-Optional secondary: Cosmopolitan APE `biew.com` (build tree `/tmp/bape2`,
-`x86_64-unknown-cosmo-cc` + `x86_64-linux-cosmo-objcopy -O binary`).
+  `newterm` so its SS3-modified F1–F4 encodings (`\EO5P` etc.) decode.
+- `__init_vio` failure is fatal; `TERM` must resolve (os_dep.c maps
+  xterm/screen/tmux/konsole/etc. prefixes to TERM_XTERM, else exits).
+- Linux VTs use the `on_console`/vcsa path (kernel console API, not
+  escape sequences; ncurses is not started there).
 
 Sanitizer build: `make clean && make SANITIZE=address,undefined`.
 Cross-compile/other archs: `./configure --target-arch=arm` etc.; archs
@@ -86,11 +82,11 @@ Full interactive matrix (menus, mode/nav keys, dialogs open+close, clean
 exits):
 
 ```sh
-python3 tests/drive.py --bin src/biew --bin "sh ./biew.com"
+python3 tests/drive.py --bin src/biew
 ```
 
-Native runs TERM=dumb (raw-parser path); the APE runs TERM=vt100 via `sh`
-— direct exec can detour through a registered MZ binfmt handler.
+Runs two env profiles: `xt` (TERM=xterm-256color) and `kon`
+(KONSOLE_VERSION=1 → konsole-256color terminfo swap).
 
 ## Repo layout
 

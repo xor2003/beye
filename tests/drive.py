@@ -5,22 +5,18 @@ Spawns a binary under a pseudo-terminal, feeds key bytes, scrapes the
 resulting screen with a minimal vt100 emulator and asserts expected
 text.  Every case gets a FRESH session, so a case that exits or leaves a
 dialog open cannot cascade into later failures.  The SAME case list runs
-against every binary given with --bin, so behavioral divergence (cosmo
-APE vs glibc build) is caught by direct comparison.
+against every binary given with --bin, so builds can be compared
+directly.
 
-The native build requires notcurses (no direct-ANSI path exists), so it
+The native build requires ncurses (no direct-ANSI path exists), so it
 is driven in two passes with a real terminfo: "xt" (TERM=xterm-256color,
 xterm CSI modified-F keys) and "kon" (KONSOLE_VERSION set so biew swaps
 in konsole-256color -> Konsole SS3 modified-F1-F4 keys decode).  The PTY
-answers notcurses' init queries (DA, kitty-kbd, XTGETTCAP, geometry).
-The APE keeps the raw ANSI parser and runs once under TERM=vt100.
-Invoke the APE as `sh biew.com`: on hosts where a binfmt_misc MZ handler
-(e.g. kvikdos) is registered, a direct exec is routed through that
-interpreter's polyglot hop and can be flaky.
+answers the few terminal queries ncurses emits at init (cursor position
+and any others), the same replies a real terminal would send.
 
 Usage:
     drive.py --bin /path/to/biew [--bin ...] [--filter REGEX] [--list]
-    drive.py --bin ./biew --bin "sh ./biew.com"  # compare native vs APE
 
 Note: the modifier-legend switch (Shift/Ctrl/Alt held alone) cannot be
 exercised from a PTY — terminals never encode bare modifiers.  That path
@@ -197,10 +193,9 @@ class VtScreen:
 
 # -------------------------------------------------------------- driver ----
 
-# notcurses probes the terminal during init and BLOCKS until each query
-# is answered; emulate the replies a real terminal would send.  Every
-# known query gets a reply — an answer that lands after nc's wait has
-# expired leaks into the input queue and decodes as a stray ESC.
+# ncurses sends a cursor-position query (u7) during init and may probe a
+# few more capabilities; emulate the replies a real terminal would send
+# so nothing stalls and no reply leaks into the key stream.
 QFIX = [
     (re.compile(rb"\x1b\[c"),        b"\x1b[?1;2c"),      # DA1
     (re.compile(rb"\x1b\[>c"),       b"\x1b[>1;0;0c"),    # DA2
@@ -246,11 +241,8 @@ class Sess:
         self.buf = b""
         self._dead = False
         self._qseen = set()
-        self._nc = env.get("BIEW_TEST_NC") == "1"
 
     def _answer_queries(self):
-        if not self._nc:
-            return
         for pat, rep in QFIX + QDYN:
             for m in pat.finditer(self.buf):
                 q = m.group(0)
@@ -326,10 +318,9 @@ class Sess:
 #   post        optional second (steps, expect, legend) checked after the
 #               first phase — used to verify dialogs close on ESC
 #   expect_exit the process must be dead after `steps`
-#   enc         key encoding the case needs under the notcurses backend:
+#   enc         key encoding the case exercises:
 #               "xt" = xterm CSI modified keys, "kon" = Konsole SS3-modified;
-#               None runs in the xt pass.  Ignored for the APE (its raw
-#               parser accepts every form).
+#               None runs in both passes.
 
 TESTFILE = os.environ.get("BIEW_TEST_FILE", "/tmp/t.com")
 
@@ -467,16 +458,13 @@ def run_case(argv, env, case, wait=3.0):
 
 
 def profiles_for(cmd):
-    """(tag, env_overrides, enc) list — APE once under vt100; native twice
-    (xterm-256color pass, then the KONSOLE_VERSION -> konsole terminfo
-    override pass) with notcurses' init queries answered by the PTY."""
+    """(tag, env_overrides, enc) list — two passes: xterm-256color, then
+    the KONSOLE_VERSION -> konsole-256color terminfo override pass."""
     if os.environ.get("BIEW_TEST_TERM"):
         return [("", {"TERM": os.environ["BIEW_TEST_TERM"]}, "xt")]
-    if cmd.rstrip().endswith(".com"):
-        return [("", {"TERM": "vt100"}, "raw")]
-    return [("xt",  {"TERM": "xterm-256color", "BIEW_TEST_NC": "1"}, "xt"),
-            ("kon", {"TERM": "xterm-256color", "KONSOLE_VERSION": "1",
-                     "BIEW_TEST_NC": "1"}, "kon")]
+    return [("xt",  {"TERM": "xterm-256color"}, "xt"),
+            ("kon", {"TERM": "xterm-256color", "KONSOLE_VERSION": "1"},
+             "kon")]
 
 
 def main():
@@ -512,7 +500,7 @@ def main():
                 name = case["name"]
                 if filt and not filt.search(name):
                     continue
-                if penc != "raw" and (case["enc"] or "xt") != penc:
+                if (case["enc"] or "xt") != penc:
                     continue
                 ok, msg = run_case(argv, env, case)
                 for _ in range(2):                    # flaky-input retries

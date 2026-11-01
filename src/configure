@@ -572,18 +572,7 @@ if test ! -d "biewlib/sysdep/$build_arch" || \
     fi
 fi
 
-# Cosmopolitan builds cannot use the host's glibc X11 headers/libs,
-# and must be linked by the cosmo compiler driver, not host gcc.
-_cosmo=no
-if echo 'int main(){return 0;}' | $_cc -x c - -E -dM 2>/dev/null | grep -q __COSMOPOLITAN__; then
-    _cosmo=yes
-    if [ "$_ld" = gcc ]; then _ld=$_cc; fi
-    # GCC14 defaults to C17 where this C89 codebase's implicit
-    # declarations are hard errors
-    _cdefos="-std=gnu89 $_cdefos"
-fi
-
-if test -z "$_x11incdir" -a "$_cosmo" = no ; then
+if test -z "$_x11incdir" ; then
 echocheck "X11 headers"
   for I in /usr/include /usr/X11R6/include /usr/X11/include /usr/openwin/include ; do
     if test -d "$I/X11" ; then
@@ -679,31 +668,24 @@ echocheck "gpm.h"
 	check_header gpm.h
 	enabled gpm_h && _cdefos="-DHAVE_MOUSE $_cdefos" && _oslibs="-lgpm $_oslibs"
 echores "$gpm_h"
-echocheck "notcurses.h (terminal library)"
-	cat > $TMPC << EOF
-#include <notcurses/notcurses.h>
-int main(void) {return 0;}
-EOF
-	_nclib=
-	cc_check -lnotcurses -lnotcurses-core && _nclib="-lnotcurses -lnotcurses-core"
-	if test -n "$_nclib" ; then
-	    _cdefos="-DHAVE_NOTCURSES $_cdefos"
-	    _oslibs="$_nclib $_oslibs"
-	fi
-echores "$_nclib"
-echocheck "curses.h (key decoding; input library also used with notcurses)"
+echocheck "curses.h (terminal library)"
 	cat > $TMPC << EOF
 #include <curses.h>
 int main(void) {return 0;}
 EOF
 	_curseslib=
-	cc_check -lcurses && _curseslib="-lcurses"
+	cc_check -lncursesw && _curseslib="-lncursesw"
+	if test -z "$_curseslib" ; then
+	    cc_check -lcurses && _curseslib="-lcurses"
+	fi
 	if test -z "$_curseslib" ; then
 	    cc_check -lncurses && _curseslib="-lncurses"
 	fi
 	if test -n "$_curseslib" ; then
 	    _cdefos="-DHAVE_NCURSES $_cdefos"
 	    _oslibs="$_curseslib $_oslibs"
+	else
+	    die "ncurses development files are required (install libncurses-dev)"
 	fi
 echores "$_curseslib"
 	;;
