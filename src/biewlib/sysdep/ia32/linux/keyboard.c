@@ -222,6 +222,9 @@ unsigned __FASTCALL__ __kbdModFKey(unsigned n)
     return k;
 }
 
+/* set by the kitty keyboard probe (HAVE_NCURSES only); referenced by the
+   generic shift-tracking code, so it must exist in every build */
+static int kitty_mode = 0;
 
 #ifdef HAVE_NCURSES
 static int __NEAR__ map_curses_key(int ch)
@@ -263,6 +266,352 @@ static int __NEAR__ map_curses_key(int ch)
 	case KEY_SPREVIOUS:	return KE_PGUP | ADD_SHIFT;
     }
     return 0;
+}
+
+/*
+    Kitty keyboard protocol (CSI u).  Ordinary terminals have no way to
+    report a bare Shift/Ctrl/Alt press, so the modifier legend can only
+    switch on the Linux console.  Terminals implementing the kitty
+    protocol do report modifier-only key events: we probe for support
+    with "CSI ? u", push flags 15 (disambiguate | event types |
+    alternate keys | report all keys) and then decode CSI u events
+    ourselves — including press/release so a lone modifier press can
+    emit KE_SHIFTKEYS and repaint the prompt bar, exactly like the
+    console path does.
+*/
+
+static volatile int kitty_resized = 0;
+static unsigned char kib[512];		/* pending raw input bytes */
+static int kin = 0;
+
+static void kitty_winch(int sig)
+{
+    (void)sig;
+    kitty_resized = 1;
+}
+
+/* return sub-parameter si of field fi from a CSI parameter string, -1 absent */
+static int kget(const unsigned char *s, int n, int fi, int si)
+{
+    int i = 0, f = 0;
+    while (i < n)
+    {
+	int j = i, k;
+	while (i < n && s[i] != ';') i++;
+	if (f == fi)
+	{
+	    for (k = 0; k <= si; k++)
+	    {
+		int v = 0, seen = 0;
+		if (k > 0)
+		{
+		    if (j >= i || s[j] != ':') return -1;
+		    j++;
+		}
+		while (j < i && s[j] != ':')
+		{
+		    if (s[j] >= '0' && s[j] <= '9')
+		    { v = v * 10 + s[j] - '0'; seen = 1; }
+		    j++;
+		}
+		if (k == si) return seen ? v : -1;
+	    }
+	    return -1;
+	}
+	i++;
+	f++;
+    }
+    return -1;
+}
+
+/* feed a literal unicode codepoint through pushEvent as UTF-8 bytes so
+   the iconv layer recomposes the console codepage char */
+static void kitty_char(unsigned cp)
+{
+    unsigned char u[4];
+    int n, i;
+    if (cp < 0x80)	{ u[0] = cp; n = 1; }
+    else if (cp < 0x800)
+    { u[0] = 0xC0 | (cp >> 6); u[1] = 0x80 | (cp & 0x3F); n = 2; }
+    else if (cp < 0x10000)
+    { u[0] = 0xE0 | (cp >> 12); u[1] = 0x80 | ((cp >> 6) & 0x3F);
+      u[2] = 0x80 | (cp & 0x3F); n = 3; }
+    else
+    { u[0] = 0xF0 | (cp >> 18); u[1] = 0x80 | ((cp >> 12) & 0x3F);
+      u[2] = 0x80 | ((cp >> 6) & 0x3F); u[3] = 0x80 | (cp & 0x3F); n = 4; }
+    for (i = 0; i < n; i++) pushEvent(u[i]);
+}
+
+#define KP_MORE  (-1)	/* incomplete sequence — wait for more input */
+#define KP_NONE  (-2)	/* consumed input, no event to report */
+#define KP_PUSHED (-3)	/* event(s) already pushed via pushEvent */
+
+/* sync shift_status from a kitty modifier mask (mask = mods-1) */
+static void kitty_sync_mods(int mask)
+{
+    int ns = shift_status & ~(KS_SHIFT|KS_CTRL|KS_ALT|KS_CAPSLOCK|KS_NUMLOCK);
+    if (mask & 1)   ns |= KS_SHIFT;
+    if (mask & 2)   ns |= KS_ALT;
+    if (mask & 4)   ns |= KS_CTRL;
+    if (mask & 64)  ns |= KS_CAPSLOCK;
+    if (mask & 128) ns |= KS_NUMLOCK;
+    shift_status = ns;
+}
+
+static int kitty_csi(const unsigned char *s, int n, int fin)
+{
+    int code, shifted, mods, ev, mask, k;
+    if (fin == 'M' || fin == 'm')	/* SGR mouse */
+    {
+	int b, x, y;
+	if (n < 1 || s[0] != '<') return KP_NONE;
+	b = kget(s, n, 0, 0); x = kget(s, n, 1, 0); y = kget(s, n, 2, 0);
+	if (b < 0 || x < 1 || y < 1) return KP_NONE;
+	if (fin == 'm')
+	{
+	    mouse.buttons = mouse.pressed = 0;
+	    return KP_NONE;
+	}
+	mouse.x = x - 1;
+	mouse.y = y - 1;
+	if (b & 64)	/* wheel */
+	    return (b & 1) ? KE_DOWNARROW : KE_UPARROW;
+	mouse.pressed = 1;
+	switch (b & 3)
+	{
+	    case 0: mouse.buttons |= MS_LEFTPRESS; break;
+	    case 1: mouse.buttons |= MS_MIDDLEPRESS; break;
+	    case 2: mouse.buttons |= MS_RIGHTPRESS; break;
+	    default: return KP_NONE;
+	}
+	return KE_MOUSE;
+    }
+    mods = kget(s, n, 1, 0); if (mods < 0) mods = 1;
+    mask = mods - 1;
+    if (fin == '~')
+    {
+	/* legacy CSI <num>[;mods]~ function keys (mixed-input safety) */
+	static const int tk[] = {
+	    KE_HOME, KE_INS, KE_DEL, KE_END, KE_PGUP, KE_PGDN };
+	int num = kget(s, n, 0, 0), t;
+	if (num >= 1 && num <= 6) t = tk[num - 1];
+	else if (num == 7 || num == 8) t = num == 7 ? KE_HOME : KE_END;
+	else if (num >= 11 && num <= 14) t = KE_F(num - 10);
+	else if (num >= 15 && num <= 24)
+	{
+	    static const char fn[] = { 5,0,6,7,8,9,10,0,11,12 };
+	    t = fn[num - 15] ? KE_F(fn[num - 15]) : 0;
+	}
+	else t = 0;
+	if (!t) return KP_NONE;
+	kitty_sync_mods(mask);
+	if (mask & 1) t |= ADD_SHIFT;
+	if (mask & 2) t |= ADD_ALT;
+	if (mask & 4) t |= ADD_CONTROL;
+	return t;
+    }
+    if (fin != 'u')
+    {
+	/* legacy CSI [1;mods]<letter> — arrows, home/end, F1-F4, btab */
+	static const char fins[] = "ABCDHFPQRSZ";
+	static const int kv[] = {
+	    KE_UPARROW, KE_DOWNARROW, KE_RIGHTARROW, KE_LEFTARROW,
+	    KE_HOME, KE_END, KE_F(1), KE_F(2), KE_F(3), KE_F(4),
+	    KE_SHIFT_TAB };
+	const char *p = strchr(fins, fin);
+	int t;
+	if (!p) return KP_NONE;
+	t = kv[p - fins];
+	kitty_sync_mods(mask);
+	if (fin != 'Z')
+	{
+	    if (mask & 1) t |= ADD_SHIFT;
+	    if (mask & 2) t |= ADD_ALT;
+	    if (mask & 4) t |= ADD_CONTROL;
+	}
+	return t;
+    }
+    code    = kget(s, n, 0, 0);
+    shifted = kget(s, n, 0, 1);
+    ev      = kget(s, n, 1, 1); if (ev  < 0) ev   = 1;
+    if (code < 0) return KP_NONE;
+
+    if (code >= 57441 && code <= 57454)		/* modifier keys */
+    {
+	int bit = 0, ns;
+	switch (code)
+	{
+	    case 57441: case 57447: bit = KS_SHIFT; break;
+	    case 57442: case 57448: bit = KS_CTRL;  break;
+	    case 57443: case 57449: bit = KS_ALT;   break;
+	}
+	if (!bit) return KP_NONE;		/* super/hyper/meta/iso */
+	ns = ev == 3 ? shift_status & ~bit : shift_status | bit;
+	if (ns != shift_status) { shift_status = ns; return KE_SHIFTKEYS; }
+	return KP_NONE;
+    }
+    if (code >= 57358 && code <= 57360)		/* caps/scroll/num lock */
+    {
+	if (ev == 1)
+	{
+	    static const int lk[3] = { KS_CAPSLOCK, KS_SCRLOCK, KS_NUMLOCK };
+	    shift_status ^= lk[code - 57358];
+	    return KE_SHIFTKEYS;
+	}
+	return KP_NONE;
+    }
+    if (ev == 3) return KP_NONE;		/* key release */
+
+    kitty_sync_mods(mask);
+    k = 0;
+    switch (code)
+    {
+	case 27:	case 57344: k = KE_ESCAPE;	break;
+	case 9:		case 57346: k = KE_TAB;		break;
+	case 13:	case 57345: case 57414: k = KE_ENTER; break;
+	case 127:	case 57347: k = KE_BKSPACE;	break;
+	case 57348: case 57425: k = KE_INS;	break;
+	case 57349: case 57426: k = KE_DEL;	break;
+	case 57350: case 57417: k = KE_LEFTARROW;	break;
+	case 57351: case 57418: k = KE_RIGHTARROW;break;
+	case 57352: case 57419: k = KE_UPARROW;	break;
+	case 57353: case 57420: k = KE_DOWNARROW;	break;
+	case 57354: case 57421: k = KE_PGUP;	break;
+	case 57355: case 57422: k = KE_PGDN;	break;
+	case 57356: case 57423: k = KE_HOME;	break;
+	case 57357: case 57424: k = KE_END;	break;
+	case 57427: k = (mask & 128) ? '5' : KE_HOME; break;
+	default:
+	    if (code >= 57364 && code <= 57375) k = KE_F(code - 57363);
+	    else if (code >= 57399 && code <= 57408) k = '0' + (code - 57399);
+	    else if (code == 57409) k = '.';
+	    else if (code == 57410) k = '/';
+	    else if (code == 57411) k = '*';
+	    else if (code == 57412) k = '-';
+	    else if (code == 57413) k = '+';
+	    else if (code == 57415) k = '=';
+	    else if (code == 57416) k = ',';
+	    else if (code > 0 && code < 0xE000)
+	    {
+		/* literal text codepoint: unicode goes through the utf8
+		   feeder (iconv recomposes the console char), ASCII
+		   returns directly with any modifiers attached */
+		unsigned cp = (mask & 1 && shifted > 0) ? shifted : code;
+		if (cp >= 0x80)
+		{
+		    kitty_char(cp);
+		    return KP_PUSHED;
+		}
+		k = cp;
+		if (mask & 1) k |= ADD_SHIFT;
+		if (mask & 2) k |= ADD_ALT;
+		if (mask & 4) k |= ADD_CONTROL;
+		return k;
+	    }
+	    break;
+    }
+    if (!k) return KP_NONE;
+    if (mask & 1) k |= ADD_SHIFT;
+    if (mask & 2) k |= ADD_ALT;
+    if (mask & 4) k |= ADD_CONTROL;
+    return k;
+}
+
+/* parse one complete event from kib; fills kib from in_fd as needed */
+static int kitty_pull(void)
+{
+    for (;;)
+    {
+	int i, fin;
+	if (kin == 0)
+	{
+	    int r = read(in_fd, kib, (int)sizeof(kib));
+	    if (r <= 0) return KP_MORE;
+	    kin = r;
+	}
+	if (kib[0] != 0x1b)
+	{
+	    int b = kib[0];
+	    memmove(kib, kib + 1, --kin);
+	    return b;
+	}
+	if (kin < 2) goto more;
+	if (kib[1] == 'O')	/* SS3 — not expected in kitty mode */
+	{
+	    int k;
+	    if (kin < 3) goto more;
+	    k = kitty_csi(NULL, 0, kib[2]);
+	    memmove(kib, kib + 3, kin - 3); kin -= 3;
+	    if (k >= 0) return k;
+	    continue;
+	}
+	if (kib[1] != '[')	/* ESC + byte → Alt fallback */
+	{
+	    int k;
+	    if (kib[1] < 0x80) { k = kib[1] | ADD_ALT; memmove(kib, kib + 2, kin - 2); kin -= 2; return k; }
+	    memmove(kib, kib + 1, --kin);
+	    return KE_ESCAPE;
+	}
+	for (i = 2; i < kin; i++)
+	    if (kib[i] >= 0x40) break;	/* first final-range byte */
+	if (i == kin) goto more;
+	fin = kib[i];
+	{
+	    int k = kitty_csi(kib + 2, i - 2, fin);
+	    memmove(kib, kib + i + 1, kin - i - 1); kin -= i + 1;
+	    if (k >= 0) return k;
+	    if (k == KP_PUSHED) return KP_PUSHED;
+	}
+	continue;
+more:
+	{
+	    int r;
+	    if (kin >= (int)sizeof(kib)) { kin = 0; return KP_MORE; }
+	    r = read(in_fd, kib + kin, (int)sizeof(kib) - kin);
+	    if (r <= 0) return KP_MORE;
+	    kin += r;
+	}
+    }
+}
+
+/* ask for kitty flags: supporting terminals reply CSI ? <flags> u;
+   leftovers are pushed back through ungetch on failure */
+static void kitty_probe(void)
+{
+    fd_set fds;
+    struct timeval tv;
+    int i, tries;
+    putp("\033[?u");
+    fflush(stdout);
+    for (tries = 0; tries < 8; tries++)
+    {
+	tv.tv_sec = 0; tv.tv_usec = 40000;
+	FD_ZERO(&fds); FD_SET(in_fd, &fds);
+	if (select(in_fd + 1, &fds, NULL, NULL, &tv) <= 0) break;
+	i = (int)read(in_fd, kib + kin, (int)sizeof(kib) - kin);
+	if (i <= 0) break;
+	kin += i;
+	for (i = 0; i + 3 < kin; i++)
+	{
+	    if (kib[i] == 0x1b && kib[i+1] == '[' && kib[i+2] == '?')
+	    {
+		int j = i + 3;
+		while (j < kin && kib[j] >= '0' && kib[j] <= '9') j++;
+		if (j < kin && kib[j] == 'u')
+		{
+		    memmove(kib, kib + j + 1, kin - j - 1);
+		    kin -= j + 1;
+		    /* disambiguate|events|alternates|all-keys */
+		    putp("\033[>15u");
+		    fflush(stdout);
+		    signal(SIGWINCH, kitty_winch);
+		    kitty_mode = 1;
+		    return;
+		}
+	    }
+	}
+    }
+    while (kin) ungetch(kib[--kin]);	/* return probed bytes to curses */
 }
 #endif
 
@@ -365,9 +714,32 @@ void __FASTCALL__ ReadNextEvent(void)
 	    }
         } else {
 /*
-    VT100 emulation — ncurses decodes the input stream.
+    VT100 emulation — kitty CSI u or ncurses decodes the input stream.
 */
 #ifdef HAVE_NCURSES
+	    if (kitty_mode)
+	    {
+		int k;
+		if (kitty_resized)
+		{
+		    struct winsize wsz;
+		    kitty_resized = 0;
+		    if (ioctl(in_fd, TIOCGWINSZ, &wsz) == 0 &&
+			wsz.ws_col && wsz.ws_row &&
+			((unsigned)wsz.ws_col != (unsigned)tvioWidth ||
+			 (unsigned)wsz.ws_row != (unsigned)tvioHeight))
+		    {
+			__vioResize(wsz.ws_col, wsz.ws_row);
+			if (BiewScreenResize) BiewScreenResize();
+		    }
+		}
+		for (;;)
+		{
+		    k = kitty_pull();
+		    if (k == KP_PUSHED || k == KP_MORE) return;
+		    if (k >= 0) { key = k; goto place_key; }
+		}
+	    }
 	    if (biew_scr)
 	    {
 		int ch;
@@ -491,7 +863,7 @@ int __FASTCALL__ __kbdGetKey (unsigned long flg)
 	    s |= ADD_CONTROL;
 	    if (key == 'o' || key == 'O') key = KE_CTL_(O);    /* CTRL+O */
 	}
-	if (!on_console) shift_status = 0;
+	if (!on_console && !kitty_mode) shift_status = 0;
     }
 
     return key | s;
@@ -620,6 +992,7 @@ void __FASTCALL__ __init_keyboard(const char *user_cp)
 	    for (f = 0; f < 8; f++)
 		for (m = 0; m < 2; m++)
 		    if (!key_defined(nav[f][m])) define_key(nav[f][m],navkey[f]);
+	    kitty_probe();
     }
 #endif
 
@@ -672,6 +1045,14 @@ void __FASTCALL__ __term_keyboard(void)
 {
 #ifdef HAVE_ICONV
     nls_term(nls_handle);
+#endif
+#ifdef HAVE_NCURSES
+    if (kitty_mode && biew_scr)
+    {
+	set_term(biew_scr);
+	putp("\033[<u");		/* pop pushed kitty keyboard flags */
+	fflush(stdout);
+    }
 #endif
     if (on_console) ioctl(in_fd, KDSKBMODE, K_XLATE);
     tcsetattr(in_fd, TCSANOW, &sattr);

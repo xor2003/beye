@@ -80,6 +80,41 @@ for _c in "abcdefghijklmnopqrstuvwxyz0123456789":
     KEYS[_c] = _c.encode()
     KEYS["a-" + _c] = ESC + _c.encode()               # Alt+char = ESC char
 
+# kitty keyboard protocol (CSI u) encodings — used in the "kit" profile
+# where the harness answers biew's \x1b[?u probe and all input is CSI u.
+_KF = {i: 57363 + i for i in range(1, 13)}
+KEYS.update({
+    "kesc":   b"\x1b[27u",
+    "kenter": b"\x1b[13u",
+    "ktab":   b"\x1b[9u",
+    "kbs":    b"\x1b[127u",
+    "kup":    b"\x1b[57352u",
+    "kdown":  b"\x1b[57353u",
+    "kleft":  b"\x1b[57350u",
+    "kright": b"\x1b[57351u",
+    "khome":  b"\x1b[57356u",
+    "kend":   b"\x1b[57357u",
+    "kpgup":  b"\x1b[57354u",
+    "kpgdn":  b"\x1b[57355u",
+    "kins":   b"\x1b[57348u",
+    "kdel":   b"\x1b[57349u",
+    # bare modifier press (:1) / release (:3) — the legend-switch events
+    "ksh_dn": b"\x1b[57441;1:1u", "ksh_up": b"\x1b[57441;1:3u",
+    "kct_dn": b"\x1b[57442;1:1u", "kct_up": b"\x1b[57442;1:3u",
+    "kal_dn": b"\x1b[57443;1:1u", "kal_up": b"\x1b[57443;1:3u",
+    "krel_a": b"\x1b[97;1:3u",                            # 'a' release — ignored
+    "k_a":    b"\x1b[97u",                                # plain 'a'
+    "k_A":    b"\x1b[97:65;2u",                           # shifted 'a' → 'A'
+    "kc_a":   b"\x1b[97;5u",                              # ctrl-a
+    "ka_o":   b"\x1b[111;3u",                             # alt-o
+})
+for _n in range(1, 13):
+    _k = str(_KF[_n]).encode()
+    KEYS["kf%d" % _n]  = b"\x1b[" + _k + b"u"
+    KEYS["ksf%d" % _n] = b"\x1b[" + _k + b";2u"       # shift
+    KEYS["kcf%d" % _n] = b"\x1b[" + _k + b";5u"       # ctrl
+    KEYS["kaf%d" % _n] = b"\x1b[" + _k + b";3u"       # alt
+
 # ------------------------------------------------------- vt100 scraper ----
 
 DECSG = {"q": "─", "x": "│", "j": "┘", "k": "┐", "l": "┌", "m": "└",
@@ -200,9 +235,6 @@ QFIX = [
     (re.compile(rb"\x1b\[c"),        b"\x1b[?1;2c"),      # DA1
     (re.compile(rb"\x1b\[>c"),       b"\x1b[>1;0;0c"),    # DA2
     (re.compile(rb"\x1b\[=c"),       b"\x1b[=0;0c"),      # DA3
-    (re.compile(rb"\x1b\[\?u"),      b"\x1b[?0u"),        # kitty kbd queries:
-    (re.compile(rb"\x1b\[>u"),       b"\x1b[?0u"),        #   ?u query, >u push,
-    (re.compile(rb"\x1b\[=[0-9]+u"), b"\x1b[?0u"),        #   =flags u request
     (re.compile(rb"\x1b\[>[0-9;]*q"),b"\x1b[>0;0q"),      # XTSMCRTSTYLE
     (re.compile(rb"\x1b\[\?1;1;0S"), b"\x1b[?1;0;0S"),    # sixel queries
     (re.compile(rb"\x1b\[\?2;1;0S"), b"\x1b[?2;0;0S"),
@@ -243,9 +275,17 @@ class Sess:
         self.buf = b""
         self._dead = False
         self._qseen = set()
+        self.kitty = env.get("BIEW_TEST_KITTY") == "1"
 
     def _answer_queries(self):
-        for pat, rep in QFIX + QDYN:
+        qs = list(QFIX) + list(QDYN)
+        if self.kitty:
+            # kitty kbd queries: ?u query, >u push, =flags u request —
+            # a real xterm implements none of these and stays silent
+            qs += [(re.compile(rb"\x1b\[\?u"), b"\x1b[?0u"),
+                   (re.compile(rb"\x1b\[>u"),  b"\x1b[?0u"),
+                   (re.compile(rb"\x1b\[=[0-9]+u"), b"\x1b[?0u")]
+        for pat, rep in qs:
             for m in pat.finditer(self.buf):
                 q = m.group(0)
                 if q in self._qseen:
@@ -359,6 +399,10 @@ PROBE_KEYS = (["f%d" % i for i in list(range(1, 10)) + [11, 12]] +
 TEXT_STEPS   = [("key", "f4", 0.8), ("key", "enter", 0.9)]
 DISASM_STEPS = [("key", "f4", 0.8), ("key", "down", 0.3), ("key", "down", 0.3),
                 ("key", "down", 0.3), ("key", "enter", 0.9)]
+# kitty-encoded equivalents (used by enc="kit" cases)
+TEXT_STEPS_K   = [("key", "kf4", 0.8), ("key", "kenter", 0.9)]
+DISASM_STEPS_K = [("key", "kf4", 0.8), ("key", "kdown", 0.3), ("key", "kdown", 0.3),
+                  ("key", "kdown", 0.3), ("key", "kenter", 0.9)]
 
 
 def probe_matrix(s, keys, settle=0.4):
@@ -513,6 +557,31 @@ def cases():
         enc="xt", expect=["@@diff"],
         post=([("key", "esc", 0.6)], ["1Help"], ()))
 
+    # -- kitty keyboard protocol (CSI u) ---------------------------------
+    # modifier-only press/release switches the legend, like on console
+    add("kitty-shift-legend", [("key", "ksh_dn", 0.8)],
+        expect=["About", "SysInf", "NavFmt"], enc="kit",
+        post=([("key", "ksh_up", 0.6)], ["1Help"], ()))
+    add("kitty-ctrl-legend",  [("key", "kct_dn", 0.8)],
+        expect=["BinMod", "ReRead"], enc="kit",
+        post=([("key", "kct_up", 0.6)], ["1Help"], ()))
+    add("kitty-alt-legend",   [("key", "kal_dn", 0.8)],
+        expect=["Reload", "Dir"], enc="kit",
+        post=([("key", "kal_up", 0.6)], ["1Help"], ()))
+    # modifier is still held while the F-key event arrives
+    add("kitty-shift-f1", [("key", "ksh_dn", 0.5), ("key", "ksf1", 0.8)],
+        expect=["Binary Viewer"], enc="kit",
+        post=([("key", "ksh_up", 0.3), ("key", "kesc", 0.6)], ["1Help"], ()))
+    add("kitty-cf1-bitness", DISASM_STEPS_K + [("key", "kcf1", 0.8)],
+        expect=["Select bitness mode"], enc="kit",
+        post=([("key", "kesc", 0.6)], ["1Help"], ()))
+    # ordinary keys through CSI u
+    add("kitty-esc-quit",  [("key", "kesc", 1.0)], expect_exit=True, enc="kit")
+    add("kitty-enter",     [("key", "kenter", 0.7)], expect=["@@diff"], enc="kit")
+    add("kitty-down",      [("key", "kdown", 0.4), ("key", "kdown", 0.4)],
+        expect=["@@diff"], enc="kit")
+    add("kitty-release",   [("key", "krel_a", 0.5)], expect=["@@same"], enc="kit")
+
     # -- comprehensive probe: every F-key x modifier in text + disasm modes
     # (the startup mode depends on ini LastMode, so pick it explicitly)
     add("probe-text",   TEXT_STEPS, probe=list(PROBE_KEYS), enc="xt")
@@ -608,6 +677,7 @@ def profiles_for(cmd):
     if os.environ.get("BIEW_TEST_TERM"):
         return [("", {"TERM": os.environ["BIEW_TEST_TERM"]}, "xt")]
     return [("xt",  {"TERM": "xterm-256color"}, "xt"),
+            ("kit", {"TERM": "xterm-256color", "BIEW_TEST_KITTY": "1"}, "kit"),
             ("kon", {"TERM": "xterm-256color", "KONSOLE_VERSION": "1"},
              "kon")]
 
