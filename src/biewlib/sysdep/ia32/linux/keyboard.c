@@ -852,11 +852,23 @@ int __FASTCALL__ __kbdGetKey (unsigned long flg)
     if (__MsGetBtns() && flg == KBD_NONSTOP_ON_MOUSE_PRESS) return KE_MOUSE;
 
     while (!keybuf.current) {
-	__OsYield();
 	if (!on_console) {
-	    /* non-blocking read — needed when SIGIO can't reach us
-	       (e.g. Cosmopolitan builds, where O_ASYNC stays off) */
+	    /* Block on the tty instead of polling getch(): a nodelay
+	       getch() runs full ncurses bookkeeping per call, so the old
+	       ~10kHz poll burned a core at idle.  SIGIO also interrupts
+	       the wait where O_ASYNC is armed.  The bound (~ESCDELAY)
+	       lets a lone ESC buffered by ncurses resolve on time and
+	       drains bytes already pulled into its fifo (mouse_dirty). */
+	    if (!mouse_dirty)
+	    {
+		fd_set fds;
+		struct timeval tv = { 0, 30000 };
+		FD_ZERO(&fds); FD_SET(in_fd, &fds);
+		select(in_fd + 1, &fds, NULL, NULL, &tv);
+	    }
 	    ReadNextEvent();
+	} else {
+	    __OsYield();
 	}
 #ifdef	HAVE_MOUSE
 	if (gpmhandle) ReadNextEvent();

@@ -103,6 +103,7 @@ static int __NEAR__ __FASTCALL__ __GetEvent( void (*prompt)(void) ,TWindow *win)
                     {
                       if((__MsGetBtns() & MS_LEFTPRESS) != MS_LEFTPRESS) break;
                       __MsGetPos(&mx,&my);
+                      __OsYield();
                     }
                     __MsGetPos(&mx,&my);
                     if(my != (unsigned)(tvioHeight - 1)) continue;
@@ -128,6 +129,7 @@ static int __NEAR__ __FASTCALL__ __GetEvent( void (*prompt)(void) ,TWindow *win)
                        while(1)
                        {
                           if((__MsGetBtns() & MS_LEFTPRESS) != MS_LEFTPRESS) break;
+                          __OsYield();
                        }
                        return KE_ESCAPE;
                     }
