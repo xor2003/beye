@@ -24,6 +24,11 @@ static tBool  __FASTCALL__ bin_check_fmt( void ) { return True; }
 static void __FASTCALL__ bin_init_fmt( void ) {}
 static void __FASTCALL__ bin_destroy_fmt(void) {}
 static int  __FASTCALL__ bin_platform( void) { return DISASM_CPU_IX86; }
+static int  __FASTCALL__ bin_bitness(__filesize_t pa)
+{
+  UNUSED(pa);
+  return DAB_USE16;	/* raw binaries default to 16-bit, like .COM */
+}
 
 REGISTRY_BIN binTable =
 {
@@ -37,7 +42,7 @@ REGISTRY_BIN binTable =
   NULL,
   NULL,
   bin_platform,
-  NULL,
+  bin_bitness,
   NULL,
   NULL,
   NULL,

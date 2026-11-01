@@ -336,6 +336,12 @@ static __filesize_t __FASTCALL__ MZHelp( void )
   return BMGetCurrFilePos();
 }
 
+static int __FASTCALL__ mz_bitness(__filesize_t pa)
+{
+  UNUSED(pa);
+  return DAB_USE16;	/* MZ is 16-bit real-mode code */
+}
+
 REGISTRY_BIN mzTable =
 {
   "MZ (Old DOS-exe)",
@@ -348,7 +354,7 @@ REGISTRY_BIN mzTable =
   AppendMZRef,
   NULL,
   mz_platform,
-  NULL,
+  mz_bitness,
   NULL,
   mzAddressResolv,
   mzVA2PA,

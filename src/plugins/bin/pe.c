@@ -1186,8 +1186,8 @@ static int __FASTCALL__ bitnessPE(__filesize_t off)
 {
    if(off >= headshift)
    {
-     return (pe.peFlags & 0x0040) ? DAB_USE16 :
-	    (pe.peFlags & 0x0100) ? DAB_USE32 : DAB_USE64;
+     /* peMagic is authoritative: 0x20b = PE32+ (64-bit), else 32-bit PE */
+     return pe.peMagic == 0x20b ? DAB_USE64 : DAB_USE32;
    }
    else return DAB_USE16;
 }

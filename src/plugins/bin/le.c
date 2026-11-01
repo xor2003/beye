@@ -327,6 +327,12 @@ static tBool __FASTCALL__ leAddressResolv(char *addr,__filesize_t cfpos)
 
 static int __FASTCALL__ lePlatform( void ) { return DISASM_CPU_IX86; }
 
+/* the DOS stub before the LE header is 16-bit; the LE body is 32-bit code */
+static int __FASTCALL__ leBitness(__filesize_t pa)
+{
+  return pa < headshift ? DAB_USE16 : DAB_USE32;
+}
+
 REGISTRY_BIN leTable =
 {
   "LE (Linear Executable)",
@@ -337,7 +343,7 @@ REGISTRY_BIN leTable =
   NULL,
   NULL,
   lePlatform,
-  NULL,
+  leBitness,
   NULL,
   leAddressResolv,
   NULL,

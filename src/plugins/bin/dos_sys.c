@@ -96,6 +96,11 @@ static tBool  __FASTCALL__ dossys_check_fmt( void )
 static void __FASTCALL__ dossys_init_fmt( void ) {}
 static void __FASTCALL__ dossys_destroy_fmt(void) {}
 static int  __FASTCALL__ dossys_platform( void) { return DISASM_CPU_IX86; }
+static int  __FASTCALL__ dossys_bitness(__filesize_t pa)
+{
+  UNUSED(pa);
+  return DAB_USE16;	/* DOS device drivers are 16-bit real-mode code */
+}
 
 static tBool __FASTCALL__ dossys_AddressResolv(char *addr,__filesize_t cfpos)
 {
@@ -124,7 +129,7 @@ REGISTRY_BIN dossysTable =
   NULL,
   NULL,
   dossys_platform,
-  NULL,
+  dossys_bitness,
   NULL,
   dossys_AddressResolv,
   NULL,
