@@ -6,7 +6,7 @@ History: SourceForge CVS (beye) imported to git — see commits back to 2001.
 
 ## Build
 
-Primary build: native gcc + notcurses (this is the default):
+Primary build: native gcc + notcurses & ncurses (this is the default):
 
 ```sh
 cd src
@@ -24,6 +24,30 @@ make install PREFIX=$HOME/.local DATADIR=$HOME/.local/share/biew
 Data files (hlp/skn/syntax/xlt) resolve via `~/.local/share/biew/` first —
 `__get_rc_dir` prefers `$XDG_DATA_HOME/biew` over the compiled-in
 `/usr/local/share/biew`.
+
+## Console I/O architecture (native build)
+
+All terminal I/O goes through libraries — no direct ANSI code is compiled
+(`HAVE_NOTCURSES` gates out every `twrite`/escape literal and the raw
+escape-sequence parser; the APE build keeps that code under `#ifndef`).
+
+- **notcurses** renders the screen (`biew_nc` in `vio.c`).
+- **ncurses** decodes keyboard input on the real tty fd (`nc_scr` in
+  `ia32/linux/keyboard.c`): its fifo reassembles split escape sequences and
+  its `ESCDELAY` delivers a lone ESC, which notcurses 3.x standard input
+  mode never emits (a lone ESC is held forever as a possible Alt prefix).
+- After `ncurses` init succeeds, fd 0 is `dup2`'d to an empty pipe so
+  notcurses' input thread and ncurses never race on the same byte stream;
+  nc still gets signal-generated `NCKEY_RESIZE` via its internal pipes.
+- Kitty-keyboard terminals (`kitty`/`ghostty`/`foot`/`wezterm`/`alacritty`/
+  `contour`/`rio` or their env vars) keep notcurses input instead: CSI-u
+  delivers lone ESC plus bare-modifier press/release events used for the
+  modifier legend, and ncurses cannot decode CSI-u.
+- Konsole detection (`KONSOLE_VERSION`/`KONSOLE_DBUS_SERVICE` +
+  `TERM=xterm-256color`) swaps TERM to `konsole-256color` before
+  `notcurses_init` — the swap persists so ncurses binds the same
+  SS3-modified F1–F4 encodings (`\EO5P` etc.).
+- Linux VTs use the `on_console`/vcsa path (kernel console API, unchanged).
 
 Optional secondary: Cosmopolitan APE `biew.com` (build tree `/tmp/bape2`,
 `x86_64-unknown-cosmo-cc` + `x86_64-linux-cosmo-objcopy -O binary`).

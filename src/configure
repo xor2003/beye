@@ -691,8 +691,7 @@ EOF
 	    _oslibs="$_nclib $_oslibs"
 	fi
 echores "$_nclib"
-	if test -z "$_nclib" ; then
-echocheck "curses.h (input decoding)"
+echocheck "curses.h (key decoding; input library also used with notcurses)"
 	cat > $TMPC << EOF
 #include <curses.h>
 int main(void) {return 0;}
@@ -707,7 +706,6 @@ EOF
 	    _oslibs="$_curseslib $_oslibs"
 	fi
 echores "$_curseslib"
-	fi
 	;;
     unix)
 	_cdefos="-D__UNIX__ -D__OS__=\"unix\" -Uunix -DHAVE_TERMINAL_OUT=1 $_cdefos"

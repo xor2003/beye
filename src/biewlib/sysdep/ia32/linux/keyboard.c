@@ -69,6 +69,8 @@ static int gpmhandle;
 #ifdef HAVE_NOTCURSES
 #include <notcurses/notcurses.h>
 extern struct notcurses *biew_nc;	/* created by __init_vio (non-console) */
+#endif
+#if defined(HAVE_NOTCURSES) || defined(HAVE_NCURSES)
 extern void __FASTCALL__ BiewScreenResize(void) __attribute__((weak));	/* biew.c: re-layout top-level windows; weak so -lbiew-only tools still link */
 #endif
 
@@ -76,6 +78,25 @@ extern void __FASTCALL__ BiewScreenResize(void) __attribute__((weak));	/* biew.c
 #include <curses.h>
 static SCREEN *nc_scr = NULL;
 static FILE *nc_devnull = NULL;
+static FILE *nc_ttyin = NULL;
+#endif
+
+#if defined(HAVE_NOTCURSES) && defined(HAVE_NCURSES)
+/* kitty-keyboard terminals send lone ESC as CSI 27 u and bare modifiers
+   as their own events — notcurses decodes those correctly, so keep its
+   input there.  Everywhere else ncurses owns key decoding. */
+static int __kbdKittyTerm(void)
+{
+    const char *t = getenv("TERM");
+    return
+	(t && (strstr(t, "kitty") || strstr(t, "ghostty") ||
+	       strstr(t, "foot") || strstr(t, "wezterm") ||
+	       strstr(t, "alacritty") || strstr(t, "contour") ||
+	       strstr(t, "rio"))) ||
+	getenv("KITTY_WINDOW_ID") || getenv("WEZTERM_PANE") ||
+	getenv("GHOSTTY_RESOURCES_DIR") || getenv("ALACRITTY_WINDOW_ID")
+	!= NULL;
+}
 #endif
 
 /* true when a terminal library (ncurses or notcurses) owns input
@@ -181,6 +202,7 @@ typedef struct {
     translatable sequences
 */
 
+#ifndef HAVE_NOTCURSES
 static const pseq seq0 = {
     {'A',KE_UPARROW},
     {'B',KE_DOWNARROW},
@@ -284,6 +306,7 @@ static eseq S[SEQ_NUM] = {
 {'[', '1', '^', (p1seq *)seq7 },
 {'[', '2', '^', (p1seq *)seq8 },
 };
+#endif /* HAVE_NOTCURSES */
 
 static mevent mouse = {0, 0, 0, 0};
 
@@ -418,6 +441,7 @@ static int __NEAR__ map_nc_input(const ncinput *ni)
 #ifdef HAVE_NCURSES
 static int __NEAR__ map_curses_key(int ch)
 {
+    if (ch == '\r' || ch == '\n') return KE_ENTER;
     if (ch >= 0 && ch <= 255) return ch;	/* raw byte (incl. utf-8 parts) */
     if (ch >= KEY_F(1) && ch <= KEY_F(63))
     {
@@ -460,6 +484,7 @@ static int __NEAR__ map_curses_key(int ch)
 /* Bounded wait for a continuation byte of an escape sequence: pty/ssh
    can split ESC... writes, and a leading ESC decoded too early reads as
    a lone-ESC (quit).  Costs at most ~25 ms once per sequence. */
+#ifndef HAVE_NOTCURSES
 static int getwait(unsigned char *x)
 {
     if (read(in_fd, x, 1) == 1) return 0;
@@ -474,6 +499,7 @@ static int getwait(unsigned char *x)
     }
     return -1;
 }
+#endif /* HAVE_NOTCURSES */
 
 void __FASTCALL__ ReadNextEvent(void)
 {
@@ -575,11 +601,12 @@ void __FASTCALL__ ReadNextEvent(void)
 	    }
         } else {
 /*
-    VT100 emulation — ncurses decodes the input stream when available
-    (its internal fifo completes escape sequences split across reads);
-    the hand-rolled parser below remains as a fallback.
+    VT100 emulation — notcurses decodes the input stream; builds
+    without HAVE_NOTCURSES keep the hand-rolled parser below.
 */
+#ifndef HAVE_NOTCURSES
 	    unsigned char c[SEQ_LEN];
+#endif
 
 #ifdef HAVE_NOTCURSES
 	    if (biew_nc)
@@ -621,6 +648,11 @@ void __FASTCALL__ ReadNextEvent(void)
 		    if(rawkb_mode) { rawkb_buf[0]=(unsigned char)ni.id; rawkb_len=1; }
 		    goto place_key;
 		}
+#ifdef HAVE_NCURSES
+		/* when ncurses owns key decoding, nc's queue only carries
+		   signal-driven events (resize) — fall through */
+		if (!nc_scr)
+#endif
 		return;
 	    }
 #endif
@@ -630,6 +662,19 @@ void __FASTCALL__ ReadNextEvent(void)
 		int ch;
 		while ((ch = getch()) != ERR)
 		{
+		    if (ch == KEY_RESIZE)
+		    {
+			struct winsize wsz;
+			if (ioctl(in_fd, TIOCGWINSZ, &wsz) == 0 &&
+			    wsz.ws_col && wsz.ws_row &&
+			    ((unsigned)wsz.ws_col != (unsigned)tvioWidth ||
+			     (unsigned)wsz.ws_row != (unsigned)tvioHeight))
+			{
+			    __vioResize(wsz.ws_col, wsz.ws_row);
+			    if (BiewScreenResize) BiewScreenResize();
+			}
+			continue;
+		    }
 		    if (ch == KEY_MOUSE)
 		    {
 			MEVENT me;
@@ -679,8 +724,9 @@ void __FASTCALL__ ReadNextEvent(void)
 	    }
 #endif
 
+#ifndef HAVE_NOTCURSES
 	    if (get(c[0]) < 0) return;
-	    
+
 	    switch(c[0]) {
 		case KE_ESCAPE		: break;
 		case KE_STATUS_RESET	: if(!rawkb_mode) {set_s(0); } else { rawkb_mode=0; return; }
@@ -853,6 +899,7 @@ void __FASTCALL__ ReadNextEvent(void)
 	        }
 	    }
 #undef S
+#endif /* HAVE_NOTCURSES */
 	}
 c_end:
 	if (alt_prefix && key) key |= ADD_ALT;
@@ -991,19 +1038,40 @@ void __FASTCALL__ __init_keyboard(const char *user_cp)
 	on_console = 0;
     }
 
+#ifdef HAVE_NOTCURSES
+    if (biew_nc) {
+	/* Terminal-query replies that arrived after notcurses_init's
+	   waits expired are buffered as input events — drain them or a
+	   leading ESC decodes as quit.  A real keypress during init is
+	   dropped here too (same as the termios flush would do). */
+	ncinput nini;
+	int quiet = 0;
+	while (quiet < 200) {	/* ~20 ms of quiet before we trust it */
+	    int got = 0;
+	    while (notcurses_get_nblock(biew_nc, &nini)) got = 1;
+	    if (got) quiet = 0; else quiet++;
+	    if (!got) __OsYield();
+	}
+    }
+#endif
+
 #ifdef HAVE_NCURSES
     if (!on_console
-#ifdef HAVE_NOTCURSES
-	&& !biew_nc	/* notcurses already owns input+output */
+#if defined(HAVE_NOTCURSES)
+	&& !(biew_nc && __kbdKittyTerm()) /* kitty CSI-u needs nc's decoder */
 #endif
 	)
     {
-	/* ncurses owns input decoding on non-console terminals: its
+	/* ncurses owns key decoding on non-console terminals: its
 	   fifo completes escape sequences split across reads and its
 	   ESCDELAY wait distinguishes a lone ESC from a sequence.
-	   Output stays with the twin layer, so curses gets /dev/null. */
+	   Output stays with the twin layer, so curses gets /dev/null
+	   for output and a dup of the tty fd for input (fd 0 itself is
+	   handed to notcurses' idle input thread below). */
 	nc_devnull = fopen("/dev/null","w");
-	if (nc_devnull) nc_scr = newterm(NULL,nc_devnull,stdin);
+	nc_ttyin = fdopen(dup(in_fd), "r");
+	if (nc_devnull && nc_ttyin)
+	    nc_scr = newterm(NULL,nc_devnull,nc_ttyin);
 	if (nc_scr)
 	{
 	    static const int fbnum[12] = { 1,1,1,1,15,17,18,19,20,21,23,24 };
@@ -1036,10 +1104,46 @@ void __FASTCALL__ __init_keyboard(const char *user_cp)
 		    else	snprintf(sq,sizeof(sq),"\033[%d;%d~",fbnum[f],m);
 		    if (!key_defined(sq)) define_key(sq,kc);
 		}
+	    /* curses' output goes to /dev/null, so keypad()'s smkx never
+	       reaches the terminal and arrows/home/end keep arriving in
+	       normal (CSI) mode — bind both forms explicitly. */
+	    static const char *nav[8][2] = {
+		{ "\033[A", "\033OA" }, { "\033[B", "\033OB" },
+		{ "\033[C", "\033OC" }, { "\033[D", "\033OD" },
+		{ "\033[H", "\033OH" }, { "\033[F", "\033OF" },
+		{ "\033[1~", "\033[7~" }, { "\033[4~", "\033[8~" },
+	    };
+	    static const int navkey[8] = {
+		KEY_UP, KEY_DOWN, KEY_RIGHT, KEY_LEFT,
+		KEY_HOME, KEY_END, KEY_HOME, KEY_END,
+	    };
+	    for (f = 0; f < 8; f++)
+		for (m = 0; m < 2; m++)
+		    if (!key_defined(nav[f][m])) define_key(nav[f][m],navkey[f]);
 	}
 	else
 	{
 	    if (nc_devnull) { fclose(nc_devnull); nc_devnull = NULL; }
+	    if (nc_ttyin) { fclose(nc_ttyin); nc_ttyin = NULL; }
+	}
+    }
+#endif
+
+#if defined(HAVE_NOTCURSES) && defined(HAVE_NCURSES)
+    if (biew_nc && nc_scr)
+    {
+	/* ncurses owns the real tty input now.  notcurses' input thread
+	   polls fd 0; move it to an empty pipe so the two libraries
+	   never race on the same byte stream.  nc keeps rendering on
+	   stdout and still gets signal-generated NCKEY_RESIZE through
+	   its internal pipes. */
+	static int nc_stdin_wfd;
+	int pfd[2];
+	if (pipe(pfd) == 0)
+	{
+	    dup2(pfd[0], 0);
+	    close(pfd[0]);
+	    nc_stdin_wfd = pfd[1];	/* keep open: EOF would spin nc's reader */
 	}
     }
 #endif
@@ -1102,6 +1206,7 @@ void __FASTCALL__ __term_keyboard(void)
 	delscreen(nc_scr);
 	nc_scr = NULL;
 	if (nc_devnull) { fclose(nc_devnull); nc_devnull = NULL; }
+	if (nc_ttyin) { fclose(nc_ttyin); nc_ttyin = NULL; }
     }
 #endif
     if (on_console) ioctl(in_fd, KDSKBMODE, K_XLATE);

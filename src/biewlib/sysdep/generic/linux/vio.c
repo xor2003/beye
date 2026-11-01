@@ -70,17 +70,22 @@ int console_flags = 0, on_console = 0, output_7 = 0, transparent = 0;
 static unsigned char __ansi_color[8] = {0,4,2,6,1,5,3,7};
 static tAbsCoord saveX, saveY, firstX, firstY;
 static int cursor_type = __TVIO_CUR_NORM;
-static int viohandle, out_fd, initialized, output_G1 = 0, no_frames = 0;
+static int viohandle, out_fd, initialized;
+#ifndef HAVE_NOTCURSES
+static int output_G1 = 0, no_frames = 0;
+#endif
 
 static unsigned violen;
 static unsigned char *viomem;
 static char *vtmp;
 
+#ifndef HAVE_NOTCURSES
 static unsigned char frames_vt100[0x30] =
 "aaaxuuukkuxkjjjkmvwtqnttmlvwtqnvvwwmmllnnjl00000";
 
 static unsigned char frames_dumb[0x30] =
 ": %|{+++++|+++++`++}-++++++++-+++++++++++++#%[]~";
+#endif
 
 static char *screen_cp;
 static unsigned is_unicode=0;
@@ -91,7 +96,8 @@ static void *nls_handle;
 #include <notcurses/notcurses.h>
 
 /* notcurses owns both rasterization (here) and input decoding
-   (keyboard.c) on non-console terminals. nc==NULL -> legacy ANSI path. */
+   (keyboard.c) on non-console terminals.  Init failure is fatal:
+   this build has no direct-ANSI fallback. */
 struct notcurses *biew_nc = NULL;
 static struct ncplane *nc_stdp = NULL;
 
@@ -124,13 +130,16 @@ static const struct { unsigned char r, g, b; } nc_vga[16] = {
 #endif
 
 
+#ifndef HAVE_NOTCURSES
 #define twrite(x)	write(out_fd, (x), strlen(x))
+#endif
 #define _addr(x, y)	(viomem + (x) + (y) * tvioWidth)
 #define _bg(x)		((x) >> 4)
 #define _fg(x)		((x) & 0x0f)
 #define _2color(x)	__Xlat__(__ansi_color, (x) & 7)
 /* #define _2color(x) (char)__ansi_color[((x) & 7)] */
 
+#ifndef HAVE_NOTCURSES
 #define VT100_CLEARSCREEN	"\033[2J"
 #define VT100_CLEARLINE		"\033[2K"
 #define VT100_NORMALCHARS	"\033[0m"
@@ -149,6 +158,7 @@ static const struct { unsigned char r, g, b; } nc_vga[16] = {
 #define VT100_SET_CHARSET_ROM_G1	"\033)1"
 #define VT100_SET_CHARSET_SPEC_GR_G0	"\033(2"
 #define VT100_SET_CHARSET_SPEC_GR_G1	"\033)2"
+#endif
 
 static struct {
     unsigned char last;
@@ -164,6 +174,7 @@ static int __NEAR__ __FASTCALL__ nc_is_transp(int bg)
 }
 #endif
 
+#ifndef HAVE_NOTCURSES
 static char *__FASTCALL__ _2ansi(unsigned char attr)
 {
     int bg = _bg(attr);
@@ -191,6 +202,7 @@ static char *__FASTCALL__ _2ansi(unsigned char attr)
     );
     return vtmp;
 }
+#endif
 
 inline static int __FASTCALL__ printable(unsigned char c)
 {
@@ -208,11 +220,13 @@ inline static int __FASTCALL__ printable(unsigned char c)
     return result;
 }
 
+#ifndef HAVE_NOTCURSES
 static void __FASTCALL__ gotoxy(tAbsCoord x, tAbsCoord y)
 {
     sprintf(vtmp,"\033[%d;%dH", (unsigned)(y + 1), (unsigned)(x + 1));
     twrite(vtmp);
 }
+#endif
 
 int __FASTCALL__ __vioGetCursorType( void )
 {
@@ -226,15 +240,17 @@ void __FASTCALL__ __vioSetCursorType(int type)
     if (biew_nc) {
 	if (type == __TVIO_CUR_OFF) notcurses_cursor_disable(biew_nc);
 	else notcurses_cursor_enable(biew_nc, saveY, saveX);
-	return;
     }
-#endif
+    /* on_console has no cursor-shape control via vcsa: the kernel
+       cursor stays at its default */
+#else
     if	(terminal->type == TERM_LINUX && (cursor_type == __TVIO_CUR_SOLID || type == __TVIO_CUR_SOLID)) {
 	sprintf(vtmp,"\033[?%dc", type == __TVIO_CUR_SOLID ? 7 : 0);
 	twrite(vtmp);
     }
     sprintf(vtmp,"\033[?25%c", type ? 'h' : 'l');
     twrite(vtmp);
+#endif
 }
 
 void __FASTCALL__ __vioGetCursorPos(tAbsCoord *x, tAbsCoord *y)
@@ -250,10 +266,15 @@ void __FASTCALL__ __vioSetCursorPos(tAbsCoord x, tAbsCoord y)
 #ifdef HAVE_NOTCURSES
     if (biew_nc) {
 	if (cursor_type != __TVIO_CUR_OFF) notcurses_cursor_enable(biew_nc, y, x);
-	return;
+    } else if (on_console) {
+	/* vcsa[0..3] = rows,cols,cursor x,cursor y: move the kernel
+	   cursor through the console API, not an escape sequence */
+	unsigned char pos[2] = { (unsigned char)x, (unsigned char)y };
+	PWRITE(viohandle, pos, 2, 2);
     }
-#endif
+#else
     gotoxy(x, y);
+#endif
 }
 
 void __FASTCALL__ __vioReadBuff(tAbsCoord x, tAbsCoord y, tvioBuff *buff, unsigned len)
@@ -269,7 +290,10 @@ void __FASTCALL__ __vioWriteBuff(tAbsCoord x, tAbsCoord y, const tvioBuff *buff,
 {
 #define	LEN(x) (x << 4)
     unsigned char cache_pb[LEN(VMAX_X)];
-    unsigned char *pb, *dpb, *addr;
+    unsigned char *pb, *addr;
+#ifndef HAVE_NOTCURSES
+    unsigned char *dpb;
+#endif
 
 /*    if (!len) return; */
 
@@ -328,7 +352,9 @@ void __FASTCALL__ __vioWriteBuff(tAbsCoord x, tAbsCoord y, const tvioBuff *buff,
 
 	PWRITE(viohandle, pb, len << 1, 4 + ((x + y * tvioWidth) << 1));
 
-    } else {
+    }
+#ifndef HAVE_NOTCURSES
+    else {
 	unsigned i;
 	unsigned char c,slen;
 	unsigned mode = 0, old_mode = -1;
@@ -408,6 +434,7 @@ void __FASTCALL__ __vioWriteBuff(tAbsCoord x, tAbsCoord y, const tvioBuff *buff,
 	}
 	gotoxy(xx, yy);
     }
+#endif
     if (pb != cache_pb) free(pb);
 #undef	LEN
 #undef	ca
@@ -480,7 +507,13 @@ void __FASTCALL__ __init_vio(const char *user_cp,unsigned long flags)
 		setenv("TERM", term_save, 1);	/* no konsole terminfo: retry */
 		biew_nc = notcurses_init(&nopts, stdout);
 	    }
-	    if (biew_nc) {
+	    if (!biew_nc) {
+		printm("Terminal initialization failed: this build requires "
+		       "notcurses (TERM='%s').\nExiting..\n",
+		       getenv("TERM") ? getenv("TERM") : "");
+		exit(EXIT_FAILURE);
+	    }
+	    {
 		unsigned ny, nx;
 		nc_stdp = notcurses_stdplane(biew_nc);
 		notcurses_stddim_yx(biew_nc, &ny, &nx);
@@ -532,12 +565,10 @@ void __FASTCALL__ __init_vio(const char *user_cp,unsigned long flags)
 	    }
 	    free(buf);
 	}
-    } else {
+    }
+#ifndef HAVE_NOTCURSES
+    else {
 	twrite(VT100_NORMALCHARS VT100_MODE80);
-#ifdef HAVE_NOTCURSES
-	if (biew_nc) { /* notcurses manages screen + title itself */
-	} else
-#endif
 	if (terminal->type != TERM_LINUX) {
 	    do_nls = 1;
 	    output_G1 = 1;
@@ -563,6 +594,7 @@ void __FASTCALL__ __init_vio(const char *user_cp,unsigned long flags)
 	    else twrite("\033(U");	/* set null mapping */
 	}
     }
+#endif
     initialized = 1;
 }
 
@@ -595,12 +627,14 @@ void __FASTCALL__ __term_vio(void)
     else
 #endif
     {
+#ifndef HAVE_NOTCURSES
 	if (!on_console) {
 	    if (terminal->type == TERM_XTERM) twrite("\033[?1001r\033[?1000l");
 	    if (terminal->type != TERM_XTERM || transparent)
 		twrite("\033(K");
 	    twrite(VT100_MODE80 VT100_NORMALCHARS VT100_CLEARSCREEN);
 	}
+#endif
 	__vioSetCursorPos(firstX, firstY);
     }
 

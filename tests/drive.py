@@ -8,11 +8,15 @@ dialog open cannot cascade into later failures.  The SAME case list runs
 against every binary given with --bin, so behavioral divergence (cosmo
 APE vs glibc build) is caught by direct comparison.
 
-The vt100/raw-parser path is exercised by running the native build with
-TERM=dumb (notcurses declines it) and the APE with TERM=vt100 (it refuses
-'dumb' outright).  Invoke the APE as `sh biew.com`: on hosts where a
-binfmt_misc MZ handler (e.g. kvikdos) is registered, a direct exec is
-routed through that interpreter's polyglot hop and can be flaky.
+The native build requires notcurses (no direct-ANSI path exists), so it
+is driven in two passes with a real terminfo: "xt" (TERM=xterm-256color,
+xterm CSI modified-F keys) and "kon" (KONSOLE_VERSION set so biew swaps
+in konsole-256color -> Konsole SS3 modified-F1-F4 keys decode).  The PTY
+answers notcurses' init queries (DA, kitty-kbd, XTGETTCAP, geometry).
+The APE keeps the raw ANSI parser and runs once under TERM=vt100.
+Invoke the APE as `sh biew.com`: on hosts where a binfmt_misc MZ handler
+(e.g. kvikdos) is registered, a direct exec is routed through that
+interpreter's polyglot hop and can be flaky.
 
 Usage:
     drive.py --bin /path/to/biew [--bin ...] [--filter REGEX] [--list]
@@ -108,6 +112,10 @@ class VtScreen:
         while i < n:
             ch = s[i]
             if ch == "\x1b":
+                m = re.match(r"\x1b[P_X][^\x1b]*\x1b\\", s[i:])
+                if m:                                   # DCS/APC ... ST
+                    i += m.end()
+                    continue
                 m = re.match(r"\x1b\[([0-9;?]*)([A-Za-z@`~])", s[i:])
                 if m:
                     i += m.end()
@@ -189,6 +197,39 @@ class VtScreen:
 
 # -------------------------------------------------------------- driver ----
 
+# notcurses probes the terminal during init and BLOCKS until each query
+# is answered; emulate the replies a real terminal would send.  Every
+# known query gets a reply — an answer that lands after nc's wait has
+# expired leaks into the input queue and decodes as a stray ESC.
+QFIX = [
+    (re.compile(rb"\x1b\[c"),        b"\x1b[?1;2c"),      # DA1
+    (re.compile(rb"\x1b\[>c"),       b"\x1b[>1;0;0c"),    # DA2
+    (re.compile(rb"\x1b\[=c"),       b"\x1b[=0;0c"),      # DA3
+    (re.compile(rb"\x1b\[\?u"),      b"\x1b[?0u"),        # kitty kbd queries:
+    (re.compile(rb"\x1b\[>u"),       b"\x1b[?0u"),        #   ?u query, >u push,
+    (re.compile(rb"\x1b\[=[0-9]+u"), b"\x1b[?0u"),        #   =flags u request
+    (re.compile(rb"\x1b\[>[0-9;]*q"),b"\x1b[>0;0q"),      # XTSMCRTSTYLE
+    (re.compile(rb"\x1b\[\?1;1;0S"), b"\x1b[?1;0;0S"),    # sixel queries
+    (re.compile(rb"\x1b\[\?2;1;0S"), b"\x1b[?2;0;0S"),
+    (re.compile(rb"\x1b\[\?3;1;0S"), b"\x1b[?3;0;0S"),
+    (re.compile(rb"\x1b\[14t"),      b"\x1b[4;400;640t"), # text area px
+    (re.compile(rb"\x1b\[16t"),      b"\x1b[6;16;8t"),    # cell size px
+    (re.compile(rb"\x1b\[18t"),      b"\x1b[8;25;80t"),   # text area chars
+    (re.compile(rb"\x1b\[6n"),       b"\x1b[1;1R"),       # cursor pos
+    (re.compile(rb"\x1b\[5n"),       b"\x1b[0n"),         # status ok
+]
+# queries whose reply must echo a parameter from the request
+QDYN = [
+    (re.compile(rb"\x1b\[\?([0-9;]+)\$p"),
+     lambda m: b"\x1b[?" + m.group(1) + b";0$y"),          # DECRQM -> off
+    (re.compile(rb"\x1b\]4;([0-9]+);\?\x1b\\"),
+     lambda m: b"\x1b]4;" + m.group(1) + b";rgb:0000/0000/0000\x1b\\"),
+    (re.compile(rb"\x1b\]1[012];\?\x1b\\"),
+     lambda m: m.group(0)[:-3] + b"rgb:ffff/ffff/ffff\x1b\\"),
+    (re.compile(rb"\x1bP\+q[0-9a-fA-F]+\x1b\\"),
+     lambda m: b"\x1bP1+r\x1b\\"),                         # XTGETTCAP
+]
+
 class Sess:
     def __init__(self, argv, env):
         import pty
@@ -204,6 +245,22 @@ class Sess:
         self.scr = VtScreen()
         self.buf = b""
         self._dead = False
+        self._qseen = set()
+        self._nc = env.get("BIEW_TEST_NC") == "1"
+
+    def _answer_queries(self):
+        if not self._nc:
+            return
+        for pat, rep in QFIX + QDYN:
+            for m in pat.finditer(self.buf):
+                q = m.group(0)
+                if q in self._qseen:
+                    continue
+                self._qseen.add(q)
+                try:
+                    os.write(self.fd, rep(m) if callable(rep) else rep)
+                except OSError:
+                    return
 
     def pump(self, settle=0.30):
         """Read output until quiet for `settle` seconds."""
@@ -218,6 +275,7 @@ class Sess:
                 if not d:
                     break
                 self.buf += d
+                self._answer_queries()
                 self.scr.feed(d)
                 last = time.time()
             elif time.time() - last >= settle:
@@ -268,6 +326,10 @@ class Sess:
 #   post        optional second (steps, expect, legend) checked after the
 #               first phase — used to verify dialogs close on ESC
 #   expect_exit the process must be dead after `steps`
+#   enc         key encoding the case needs under the notcurses backend:
+#               "xt" = xterm CSI modified keys, "kon" = Konsole SS3-modified;
+#               None runs in the xt pass.  Ignored for the APE (its raw
+#               parser accepts every form).
 
 TESTFILE = os.environ.get("BIEW_TEST_FILE", "/tmp/t.com")
 
@@ -275,9 +337,10 @@ def cases():
     E = []
 
     def add(name, steps, expect=(), legend=(), absent=(), post=None,
-            expect_exit=False):
+            expect_exit=False, enc=None):
         E.append(dict(name=name, steps=steps, expect=expect, legend=legend,
-                      absent=absent, post=post, expect_exit=expect_exit))
+                      absent=absent, post=post, expect_exit=expect_exit,
+                      enc=enc))
 
     # -- startup / legend -------------------------------------------------
     add("startup", [],
@@ -290,16 +353,16 @@ def cases():
         expect=["How to see"],
         post=([("key", "esc", 0.6)], ["1Help"], ()))
     add("about-sf1",     [("key", "sf1", 0.8)],
-        expect=["Select disassembler"],
+        expect=["Select disassembler"], enc="xt",
         post=([("key", "esc", 0.6)], ["1Help"], ()))
     add("about-sf1-ss3", [("key", "osf1", 0.8)],
-        expect=["Select disassembler"],
+        expect=["Select disassembler"], enc="kon",
         post=([("key", "esc", 0.6)], ["1Help"], ()))
     add("cf1-bitness",      [("key", "cf1", 0.8)],
-        expect=["Select bitness mode"],
+        expect=["Select bitness mode"], enc="xt",
         post=([("key", "esc", 0.6)], ["1Help"], ()))
     add("cf1-bitness-kon",  [("key", "ocf1", 0.8)],
-        expect=["Select bitness mode"],
+        expect=["Select bitness mode"], enc="kon",
         post=([("key", "esc", 0.6)], ["1Help"], ()))
     add("goto-f5",       [("key", "f5", 0.8)],
         expect=["UsrNam"],
@@ -308,13 +371,13 @@ def cases():
         expect=["CasSen", "WrdOnl"],
         post=([("key", "esc", 0.6)], ["1Help"], ()))
     add("fileutils-cf9", [("key", "cf9", 0.9)],
-        expect=["File utilities"],
+        expect=["File utilities"], enc="xt",
         post=([("key", "esc", 0.6)], ["1Help"], ()))
     add("fileutils-af10",[("key", "af10", 0.9)],
-        expect=["File utilities"],
+        expect=["File utilities"], enc="xt",
         post=([("key", "esc", 0.6)], ["1Help"], ()))
     add("setup-sf9",     [("key", "sf9", 0.9)],
-        legend=["Consol", "Color", "Mouse"],
+        legend=["Consol", "Color", "Mouse"], enc="xt",
         post=([("key", "esc", 0.6)], ["1Help"], ()))
 
     # -- mode / navigation -------------------------------------------------
@@ -403,11 +466,17 @@ def run_case(argv, env, case, wait=3.0):
         s.close()
 
 
-def term_for(cmd):
-    """APE refuses TERM=dumb; native falls back to vt100 path on it."""
+def profiles_for(cmd):
+    """(tag, env_overrides, enc) list — APE once under vt100; native twice
+    (xterm-256color pass, then the KONSOLE_VERSION -> konsole terminfo
+    override pass) with notcurses' init queries answered by the PTY."""
     if os.environ.get("BIEW_TEST_TERM"):
-        return os.environ["BIEW_TEST_TERM"]
-    return "vt100" if cmd.rstrip().endswith(".com") else "dumb"
+        return [("", {"TERM": os.environ["BIEW_TEST_TERM"]}, "xt")]
+    if cmd.rstrip().endswith(".com"):
+        return [("", {"TERM": "vt100"}, "raw")]
+    return [("xt",  {"TERM": "xterm-256color", "BIEW_TEST_NC": "1"}, "xt"),
+            ("kon", {"TERM": "xterm-256color", "KONSOLE_VERSION": "1",
+                     "BIEW_TEST_NC": "1"}, "kon")]
 
 
 def main():
@@ -431,25 +500,30 @@ def main():
 
     results = {}
     for cmd in bins:
-        tag = cmd.split()[-1] if " " in cmd else os.path.basename(cmd)
-        results[tag] = []
         argv = cmd.split() + [TESTFILE]
-        env = dict(os.environ)
-        env["TERM"] = term_for(cmd)
-        for case in cases():
-            name = case["name"]
-            if filt and not filt.search(name):
-                continue
-            ok, msg = run_case(argv, env, case)
-            for _ in range(2):                        # flaky-input retries
-                if ok:
-                    break
+        for ptag, penv, penc in profiles_for(cmd):
+            tag = cmd.split()[-1] if " " in cmd else os.path.basename(cmd)
+            if ptag:
+                tag += ":" + ptag
+            results[tag] = []
+            env = dict(os.environ)
+            env.update(penv)
+            for case in cases():
+                name = case["name"]
+                if filt and not filt.search(name):
+                    continue
+                if penc != "raw" and (case["enc"] or "xt") != penc:
+                    continue
                 ok, msg = run_case(argv, env, case)
-            results[tag].append((name, ok))
-            print("%-18s %-24s %s%s" % (
-                tag, name, "PASS" if ok else "FAIL",
-                ("  " + msg) if not ok else ""))
-            sys.stdout.flush()
+                for _ in range(2):                    # flaky-input retries
+                    if ok:
+                        break
+                    ok, msg = run_case(argv, env, case)
+                results[tag].append((name, ok))
+                print("%-18s %-24s %s%s" % (
+                    tag, name, "PASS" if ok else "FAIL",
+                    ("  " + msg) if not ok else ""))
+                sys.stdout.flush()
 
     print()
     fails = sum(1 for r in results.values() for (_, ok) in r if ok is False)
