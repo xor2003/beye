@@ -228,6 +228,8 @@ QDYN = [
 class Sess:
     def __init__(self, argv, env):
         import pty
+        env = dict(env)
+        env["BIEW_INI"] = _test_ini()
         self.pid, self.fd = pty.fork()
         if self.pid == 0:
             try:
@@ -324,35 +326,113 @@ class Sess:
 
 TESTFILE = os.environ.get("BIEW_TEST_FILE", "/tmp/t.com")
 
+# Hermetic ini: biew persists mode state (< Browser > section) to its rc
+# on clean exit, so an ambient ~/.biewrc silently changes the startup
+# mode and help-topic between runs.  Give every session a private copy
+# with the mode-state section stripped -> deterministic autodetect.
+def _test_ini():
+    src = os.environ.get("BIEW_INI") or os.path.expanduser("~/.biewrc")
+    dst = "/tmp/biew-drive.ini"
+    try:
+        txt = open(src).read()
+    except OSError:
+        txt = ""
+    # drop the whole < Browser > section (mode/submode/offset state):
+    # without it biew autodetects the mode from file content on startup
+    txt = re.sub(r"(?ms)^\s*< Browser >.*?(?=^\s*< |^\[ |\Z)", "", txt)
+    with open(dst, "w") as f:
+        f.write(txt)
+    return dst
+
+# Probe matrix: every F-key x modifier, sent sequentially in ONE session.
+# After each key the runner classifies it (opens / moves / inert / exits)
+# and, when a dialog/menu was opened (legend row changed), sends ESC and
+# asserts the base legend row is fully restored.  f10 goes last: it quits.
+PROBE_KEYS = (["f%d" % i for i in list(range(1, 10)) + [11, 12]] +
+              ["sf%d" % i for i in range(1, 13)] +
+              ["cf%d" % i for i in range(1, 13)] +
+              ["af%d" % i for i in range(1, 11)] +
+              ["f10"])
+
+# mode-select step lists: F4's selection box opens at the remembered
+# index (0 = Text in a fresh process), arrows clamp at the edges.
+TEXT_STEPS   = [("key", "f4", 0.8), ("key", "enter", 0.9)]
+DISASM_STEPS = [("key", "f4", 0.8), ("key", "down", 0.3), ("key", "down", 0.3),
+                ("key", "down", 0.3), ("key", "enter", 0.9)]
+
+
+def probe_matrix(s, keys, settle=0.4):
+    """Send each key in `keys`; classify and enforce the legend invariant.
+
+    Returns (results, error): results maps key -> class where class is
+    "opens" (legend changed, ESC restored it), "moves" (screen changed,
+    legend unchanged — navigation), "inert" (no visible effect) or
+    "exits" (key closed the app).  error is a failure string or None.
+    """
+    base_leg = s.scr.legend()
+    base_scr = s.scr.text()
+    res = {}
+    for k in keys:
+        if not s.alive():
+            return res, "died before %s" % k
+        s.key(KEYS[k])
+        s.pump(settle)
+        if not s.alive():
+            res[k] = "exits"
+            continue
+        if s.scr.legend() != base_leg:
+            # a dialog/menu opened: ESC must close it AND restore the legend
+            s.key(ESC)
+            s.pump(settle)
+            if not s.alive():
+                return res, "%s: ESC after dialog killed the app" % k
+            if s.scr.legend() != base_leg:
+                return res, "%s: legend stuck at %r after ESC" % (
+                    k, s.scr.legend()[:60])
+            res[k] = "opens"
+        elif s.scr.text() != base_scr:
+            res[k] = "moves"
+        else:
+            res[k] = "inert"
+    return res, None
+
+
+# coverage collected by probe cases, printed at the end of the run
+PROBE_COVERAGE = {}
+
 def cases():
     E = []
 
     def add(name, steps, expect=(), legend=(), absent=(), post=None,
-            expect_exit=False, enc=None):
+            expect_exit=False, enc=None, probe=None, pre=()):
         E.append(dict(name=name, steps=steps, expect=expect, legend=legend,
-                      absent=absent, post=post, expect_exit=expect_exit,
-                      enc=enc))
+                      absent=absent, post=post, expect_exit=expect_exit, pre=pre,
+                      enc=enc, probe=probe))
 
     # -- startup / legend -------------------------------------------------
     add("startup", [],
         legend=["1Help", "5Goto", "10Quit"])
 
     # -- dialogs: open, verify, ESC back to main legend --------------------
-    # t.com opens in disasm mode: F1 -> disasm help topic,
-    # Shift-F1 -> disassembler select, Ctrl-F1 -> bitness select (Hiew)
+    # t.com autodetects text mode: F1 -> mode help topic, Shift-F1 -> About;
+    # disasm mode (DISASM_STEPS): Shift-F1 -> disassembler select,
+    # Ctrl-F1 -> bitness select (Hiew bindings)
     add("help-f1",       [("key", "f1", 0.8)],
-        expect=["How to see"],
+        expect=["Help for"], legend=["7Search"],
         post=([("key", "esc", 0.6)], ["1Help"], ()))
     add("about-sf1",     [("key", "sf1", 0.8)],
+        expect=["Binary Viewer"], legend=["1Licenc"], enc="xt",
+        post=([("key", "esc", 0.6)], ["1Help"], ()))
+    add("dis-sel-sf1",   DISASM_STEPS + [("key", "sf1", 0.8)],
         expect=["Select disassembler"], enc="xt",
         post=([("key", "esc", 0.6)], ["1Help"], ()))
-    add("about-sf1-ss3", [("key", "osf1", 0.8)],
+    add("dis-sel-sf1-ss3", DISASM_STEPS + [("key", "osf1", 0.8)],
         expect=["Select disassembler"], enc="kon",
         post=([("key", "esc", 0.6)], ["1Help"], ()))
-    add("cf1-bitness",      [("key", "cf1", 0.8)],
+    add("cf1-bitness",      DISASM_STEPS + [("key", "cf1", 0.8)],
         expect=["Select bitness mode"], enc="xt",
         post=([("key", "esc", 0.6)], ["1Help"], ()))
-    add("cf1-bitness-kon",  [("key", "ocf1", 0.8)],
+    add("cf1-bitness-kon",  DISASM_STEPS + [("key", "ocf1", 0.8)],
         expect=["Select bitness mode"], enc="kon",
         post=([("key", "esc", 0.6)], ["1Help"], ()))
     add("goto-f5",       [("key", "f5", 0.8)],
@@ -372,14 +452,71 @@ def cases():
         post=([("key", "esc", 0.6)], ["1Help"], ()))
 
     # -- mode / navigation -------------------------------------------------
-    add("mode-f4",       [("key", "f4", 0.7)], expect=["@@diff"])
+    add("mode-f4",       [("key", "f4", 0.7)],
+        expect=["Select translation mode", "Text mode", "Disassembler"],
+        legend=["10Es"],
+        post=([("key", "esc", 0.6)], ["1Help"], ()))
     add("mode-enter",    [("key", "enter", 0.7)], expect=["@@diff"])
     add("cursor-down",   [("key", "down", 0.4), ("key", "down", 0.4)],
         expect=["@@diff"])
     add("cursor-pgdn",   [("key", "pgdn", 0.6)], expect=["@@diff"])
+    # pgdn/pgup must round-trip; binary mode (16-byte rows) makes it
+    # byte-exact — text mode wraps lines, so a page is not reversible there
     add("nav-pgup-return",[("key", "pgdn", 0.5), ("key", "pgdn", 0.4),
                           ("key", "pgup", 0.4), ("key", "pgup", 0.4)],
+        pre=[("key", "f4", 0.7), ("key", "down", 0.3), ("key", "enter", 0.9)],
         expect=["@@same"])
+
+    # -- mode selection via the F4 menu (defsel starts at Text=0) ----------
+    add("mode-sel-bin",  [("key", "f4", 0.6), ("key", "down", 0.3),
+                          ("key", "enter", 0.8)],
+        expect=["00000000: 00 01 02 03"])
+    add("mode-sel-hex",  [("key", "f4", 0.6), ("key", "down", 0.3),
+                          ("key", "down", 0.3), ("key", "enter", 0.8)],
+        expect=["00000000:i0001"])
+    add("mode-sel-dis",  DISASM_STEPS, expect=["00000000:i000"])
+    # Enter = QuickSelectMode: four presses cycle all modes back to start
+    add("mode-cycle-enter", [("key", "enter", 0.6), ("key", "enter", 0.6),
+                             ("key", "enter", 0.6), ("key", "enter", 0.7)],
+        expect=["@@same"])
+
+    # -- menus: open, verify contents + the menu legend, ESC restores ------
+    add("menu-files-cf9", [("key", "cf9", 0.9)],
+        expect=["File information", "Save block as", "Endianify block"],
+        legend=["10Es"], enc="xt",
+        post=([("key", "esc", 0.6)], ["1Help"], ()))
+    add("menu-sysinfo-sf6", [("key", "sf6", 0.9)],
+        expect=["Select tool", "ASCII table", "Input viewer"],
+        legend=["10Es"], enc="xt",
+        post=([("key", "esc", 0.6)], ["1Help"], ()))
+    add("whereami-sf5", [("key", "sf5", 0.9)],
+        expect=["Current position information", "File  offset"],
+        legend=["10Es"], enc="xt",
+        post=([("key", "esc", 0.6)], ["1Help"], ()))
+    add("fmtactions-sf8", [("key", "sf8", 0.9)],
+        legend=["2SrtNam", "3SrtOrd", "10Es"], enc="xt",
+        post=([("key", "esc", 0.6)], ["1Help"], ()))
+    add("addname-sf12", [("key", "sf12", 0.9)],
+        expect=["Name for", "offset"], legend=["10Es"], enc="xt",
+        post=([("key", "esc", 0.6)], ["1Help"], ()))
+    add("setup-legend-sf9", [("key", "sf9", 0.9)],
+        legend=["2Consol", "3Color", "4Mouse", "9ExtPrg", "10Es"], enc="xt",
+        post=([("key", "esc", 0.6)], ["1Help"], ()))
+
+    # -- menu navigation: arrows move selection, Enter picks a mode --------
+    add("menu-mode-nav", [("key", "f4", 0.6), ("key", "down", 0.3),
+                          ("key", "down", 0.3), ("key", "up", 0.3),
+                          ("key", "enter", 0.8)],
+        expect=["00000000: 00 01 02 03"])           # down,down,up -> Binary
+    # FileUtils: open, select first item (File information) -> sub-dialog
+    add("menu-fu-select", [("key", "cf9", 0.9), ("key", "enter", 0.9)],
+        enc="xt", expect=["@@diff"],
+        post=([("key", "esc", 0.6)], ["1Help"], ()))
+
+    # -- comprehensive probe: every F-key x modifier in text + disasm modes
+    # (the startup mode depends on ini LastMode, so pick it explicitly)
+    add("probe-text",   TEXT_STEPS, probe=list(PROBE_KEYS), enc="xt")
+    add("probe-disasm", DISASM_STEPS, probe=list(PROBE_KEYS), enc="xt")
 
     # -- clean exits -------------------------------------------------------
     add("quit-f10",  [("key", "f10", 0.5)], expect_exit=True)
@@ -421,6 +558,9 @@ def run_case(argv, env, case, wait=3.0):
             s.pump(0.1)
         time.sleep(0.3)
         s.pump(0.05)
+        for step in case["pre"]:
+            s.key(KEYS[step[1]])
+            s.pump(step[2] if len(step) > 2 else 0.30)
         base = s.scr.text()
         for step in case["steps"]:
             s.key(KEYS[step[1]])
@@ -443,6 +583,11 @@ def run_case(argv, env, case, wait=3.0):
         if missing or present:
             return False, "missing=%r present=%r legend=%r" % (
                 missing, present, leg[:72])
+        if case["probe"]:
+            res, err = probe_matrix(s, case["probe"])
+            PROBE_COVERAGE[case["name"]] = res
+            if err:
+                return False, "probe: %s" % err
         if case["post"]:
             psteps, pexpect, plegend = case["post"]
             for step in psteps:
@@ -513,6 +658,13 @@ def main():
                     ("  " + msg) if not ok else ""))
                 sys.stdout.flush()
 
+    if PROBE_COVERAGE:
+        print()
+        for cname, res in PROBE_COVERAGE.items():
+            print("%s:" % cname)
+            for klass in ("opens", "moves", "inert", "exits"):
+                ks = [k for k, v in res.items() if v == klass]
+                print("  %-6s %s" % (klass, " ".join(ks) or "-"))
     print()
     fails = sum(1 for r in results.values() for (_, ok) in r if ok is False)
     total = sum(len(r) for r in results.values())

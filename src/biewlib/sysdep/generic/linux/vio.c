@@ -30,6 +30,7 @@ static const char rcs_id[] = "$Id: vio.c,v 1.18 2009/09/03 16:57:40 nickols_k Ex
 #endif
 
 #define _XOPEN_SOURCE 500
+#define _DEFAULT_SOURCE
 
 #include <ctype.h>
 #include <errno.h>

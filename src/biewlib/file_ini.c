@@ -224,12 +224,11 @@ FiHandler __FASTCALL__ FiOpen( const char * filename)
 void __FASTCALL__ FiClose(FiHandler h)
 {
   PFREE(FiFileNames[FiFilePtr-1]);
-  if(FiFilePtr)
+  if(--FiFilePtr)
   {
-    FiFileNames = PRealloc(FiFileNames,sizeof(char *)*(FiFilePtr));
-    FinCurrString = PRealloc(FinCurrString,sizeof(unsigned int)*(FiFilePtr));
+    FiFileNames = PRealloc(FiFileNames,sizeof(char *)*FiFilePtr);
+    FinCurrString = PRealloc(FinCurrString,sizeof(unsigned int)*FiFilePtr);
     if(!FiFileNames || !FinCurrString) FiAError(__FI_NOTMEM,0,NULL);
-    FiFilePtr--;
   }
   else
   {
