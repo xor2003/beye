@@ -102,24 +102,6 @@ const char * CompScreenPicture[] = {
 "1010010011111",
 };
 
-const char * msgTypeComments[] =
-{
- " Mode :",
- " [ ] - Put structures    ",
- "  Type of comments:      ",
- " ( ) - None              ",
- " ( ) - NASM (*.asm)      "
-};
-
-const char *msgTypeBitness[] =
-{
- " Select bitness:         ", 
- " ( )  8-bit (nothing)    ", 
- " ( ) 16-bit (word swap)  ", 
- " ( ) 32-bit (dword swap) ", 
- " ( ) 64-bit (qword swap) "
-};
-
 const char * msgFindOpt[] =
 {
  " [ ] - Match Case                 ",
@@ -146,11 +128,6 @@ const char DIG_EVALUTOR[]=     " Digital evaluator (hexadecimal) ";
 const char DIG_OPERATORS[]=    " Known Operators - ()+-*/% ~|&^ ";
 const char EXPRESSION[]=       "Expression:";
 const char RESULT[]=           "Result:";
-const char TYPE_HEX_FORM[]=    "Enter parameters in hexadecimal form:";
-const char FILE_PRMT[]=        "File :";
-const char XLAT_PRMT[]=        "Xlat (eXtend Looking At Table) file:";
-const char START_PRMT[]=       "Start:";
-const char LENGTH_PRMT[]=      "Length:";
 const char INIT_MASK[]=        " Initialize mask ";
 const char INPUT_MASK[]=       "Enter new value of XX:";
 const char ERROR_MSG[]=        " Error ";

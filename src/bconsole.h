@@ -117,25 +117,6 @@ extern tBool        __FASTCALL__ GetStringDlg(char * buff,const char * title,con
 
 extern tBool        __FASTCALL__ GetJumpDlg( __filesize_t * addr,unsigned long *flags);
 
-#define FSDLG_BINMODE   0x00000000UL
-#define FSDLG_ASMMODE   0x00000001UL
-#define FSDLG_NOCOMMENT 0x00000000UL
-#define FSDLG_COMMENT   0x00000002UL
-#define FSDLG_STRUCTS   0x00000004UL
-#define FSDLG_NOMODES   0x00000000UL
-#define FSDLG_USEMODES  0x80000000UL
-
-#define FSDLG_BTNSMASK  0x00000003UL /**< 0=8bit 1=16bit 2=32bit 3=64bit */
-#define FSDLG_USEBITNS  0x40000000UL
-
-extern tBool        __FASTCALL__ GetFStoreDlg(const char *title,char *fname,
-                                     unsigned long *flags,
-                                     __filesize_t *start,
-                                     __filesize_t *end,
-                                     const char *prompt);
-extern tBool        __FASTCALL__ GetInsDelBlkDlg(const char *title,__filesize_t *start,
-                                        __fileoff_t *size);
-
 #define LB_SELECTIVE 0x01U
 #define LB_SORTABLE  0x02U
 #define LB_USEACC    0x04U

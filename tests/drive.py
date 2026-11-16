@@ -539,7 +539,9 @@ def cases():
 
     # -- menus: open, verify contents + the menu legend, ESC restores ------
     add("menu-files-cf9", [("key", "cf9", 0.9)],
-        expect=["File information", "Save block as", "Endianify block"],
+        expect=["File information", "Change size"],
+        absent=["Save block", "Restore block", "Insert/delete", "Crypt",
+                "Endianify", "Xlat"],
         legend=["10Es"], enc="xt",
         post=([("key", "esc", 0.6)], ["1Help"], ()))
     add("menu-sysinfo-sf6", [("key", "sf6", 0.9)],

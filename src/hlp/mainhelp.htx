@@ -78,21 +78,9 @@
               16, +-10, 8, 2
             - %RCalculator%r
             - ...
-  %IShiftF10%i- File utilities. Utilities that allow  to  change  contents
-            and size of current file.
+  %IShiftF10%i- File utilities. Utilities that allow  to  view  file
+            information and change size of current file.
               - %RChSize%r. Change file size.
-              - %RFStore%r. Write  dump  of  current  file  to  the  given
-                filename  of  choice.  It   is   possible   to   write
-                disassembler block of information in selected  bitness
-                (USE16 or USE32). Not allowed out of range of file.
-              - %RFRestore%r.  Restores  already  stored  before  dump  of
-                information starting from given  position  and  length
-                in  file.  Not  allowed   out   of   range   of   file
-                (Autotruncation).
-              - %RInsert/delete%r  -  Inserts  empty  block  or    deletes
-                existing block of information with resizing.
-              - %RCrypt block%r - crypt/decrypt block with user password.
-                This feature used non standard algorithm of encryption.
 
 %UALT - key binding to NEW-exe:%u
 

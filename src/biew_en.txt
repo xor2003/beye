@@ -271,21 +271,9 @@ CtrlF10    (bin, text, hex, disasm).
               16, +-10, 8, 2
             - Calculator
             - ...
-  ShiftF10- File utilities. Utilities that allow  to  change  contents
-            and size of current file.
+  ShiftF10- File utilities. Utilities that allow  to  view  file
+            information  and  change  size  of  current file.
               - ChSize. Change file size.
-              - FStore. Write  dump  of  current  file  to  the  given
-                filename  of  choice.  It   is   possible   to   write
-                disassembler block of information in selected  bitness
-                (USE16 or USE32). Not allowed out of range of file.
-              - FRestore.  Restores  already  stored  before  dump  of
-                information starting from given  position  and  length
-                in  file.  Not  allowed   out   of   range   of   file
-                (Autotruncation).
-              - Insert/delete  -  Inserts  empty  block  or    deletes
-                existing block of information with resizing.
-              - Crypt block - crypt/decrypt block with user password.
-                This feature used non standard algorithm of encryption.
 
 4.3.- ALT - key binding to NEW-exe:
 -----------------------------------
@@ -360,15 +348,6 @@ the help system, on the measure that, as it will develop.
 
 - Transition  on  [F5]  saves   in  the  stack  CodeGuider'    current
   position, as an address of return.
-
-- Code page convertion:
-  Code page convertion of the document occurs automatically  when
-  calling the functions [ShiftF10] => "Save block as...",  if  program
-  bases  in  the  "Text  mode"  and   chosen   coding   "CodPag",   is
-  distinguished   from   "Current".   Herewith   save   block     will
-  automatically be transformed to  the  code  operating  system  page.
-  This  fair  for  all  modes  having  not  trivial   realization   of
-  convert_cp function (today it is only beside TextMode).
 
 7.- Undocumented features
 =========================

@@ -1,7 +1,7 @@
  Help for modify mode 
    In this mode you can modify any bites, but you cannot insert or
-delete. This operations can be done from %UFile utilities%u (%IShift-F10%i)
-by %UChSize%u command or %UInsert/Delete%u block.
+delete. File size can be changed from %UFile utilities%u (%IShift-F10%i)
+by %UChSize%u command.
    Also you can use some simple cryptography:
    %IF3%i - InitXX (initialize cryptobyte)
    %IF4%i - Perform Bitwise NOT operation on current byte.
