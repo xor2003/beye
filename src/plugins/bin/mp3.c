@@ -42,8 +42,8 @@ static int tabsel_123[2][3][16] = {
 static long freqs[9] = { 44100, 48000, 32000, 22050, 24000, 16000 , 11025 , 12000 , 8000 };
 
 int mp_mp3_get_lsf(unsigned char* hbuf){
-    unsigned long newhead = 
-      hbuf[0] << 24 |
+    unsigned long newhead =
+      (unsigned long)hbuf[0] << 24 |
       hbuf[1] << 16 |
       hbuf[2] <<  8 |
       hbuf[3];
@@ -59,8 +59,8 @@ int mp_mp3_get_lsf(unsigned char* hbuf){
 #define MAXFRAMESIZE 1280
 int mp_decode_mp3_header(unsigned char* hbuf,int *fmt,int *brate,int *samplerate,int *channels){
     int nch,ssize,crc,lsf,mpeg25,framesize,padding,bitrate_index,sampling_frequency,mp3_fmt;
-    unsigned long newhead = 
-      hbuf[0] << 24 |
+    unsigned long newhead =
+      (unsigned long)hbuf[0] << 24 |
       hbuf[1] << 16 |
       hbuf[2] <<  8 |
       hbuf[3];

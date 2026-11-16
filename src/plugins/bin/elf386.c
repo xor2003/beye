@@ -2105,16 +2105,28 @@ static void __FASTCALL__ __elfReadSegments(linearArray **to, tBool is_virt )
          if(!test)
          {
            if(!la_AddData(*to,&vamap,MemOutBox)) exit(EXIT_FAILURE);
-           /** We must sort va_map after adding of each element because ELF section
-               header has unsorted and nested elements */
-           la_Sort(*to,is_virt ? vamap_comp_virt : vamap_comp_phys);
          }
        }
      }
+     /** ELF section header has unsorted and nested elements; the dedup test
+         above scans linearly, so one final sort gives the same map */
+     la_Sort(*to,is_virt ? vamap_comp_virt : vamap_comp_phys);
    }
    else /* Try to build program headers map */
     if((va_map_count = ELF_HALF(ELF_EHDR(elf,e_phnum))) != 0) /* Program headers are present */
     {
+      __filesize_t pht_room;
+      unsigned phentsz = ELF_HALF(ELF_EHDR(elf,e_phentsize));
+      /** e_phnum/e_phoff/e_phentsize come from the file: iterate only entries
+          that physically fit before EOF, like IsSectionsPresent does */
+      if(phentsz < ELF_PHDR_SIZE() || ELF_OFF(ELF_EHDR(elf,e_phoff)) >= bmGetFLength())
+        va_map_count = 0;
+      else
+      {
+        pht_room = (bmGetFLength() - ELF_OFF(ELF_EHDR(elf,e_phoff)))/phentsz;
+        if((__filesize_t)va_map_count > pht_room)
+          va_map_count = pht_room;
+      }
       if(!(*to = la_Build(va_map_count,sizeof(struct tag_elfVAMap),MemOutBox)))
       {
         exit(EXIT_FAILURE);
@@ -2137,11 +2149,11 @@ static void __FASTCALL__ __elfReadSegments(linearArray **to, tBool is_virt )
           {
             exit(EXIT_FAILURE);
           }
-          /** We must sort va_map after adding of each element because ELF program
-              header has unsorted and has nested elements */
-          la_Sort(*to,is_virt ? vamap_comp_virt : vamap_comp_phys);
         }
       }
+      /** ELF program header has unsorted and has nested elements; the dedup
+          test above scans linearly, so one final sort gives the same map */
+      la_Sort(*to,is_virt ? vamap_comp_virt : vamap_comp_phys);
     }
 }
 
