@@ -48,7 +48,8 @@ All terminal I/O goes through **ncurses** (`SCREEN *biew_scr` created by
 - Linux VTs use the `on_console`/vcsa path (kernel console API, not
   escape sequences; ncurses is not started there).
 
-Sanitizer build: `make clean && make SANITIZE=address,undefined`.
+Sanitizers (ASan+UBSan) are ON by default — `make` produces an instrumented
+binary. Opt out: `make clean && make SANITIZE=`.
 Cross-compile/other archs: `./configure --target-arch=arm` etc.; archs
 without a sysdep port fall back to `biewlib/sysdep/generic/` + `unix`/`linux`.
 

@@ -19,8 +19,10 @@ HOST_LDFLAGS=
 
 include ./config.mak
 
-# Optional sanitizer build:  make SANITIZE=address,undefined
+# Sanitizers are ON by default (address,undefined). Build without them:
+#   make SANITIZE=
 # Accepted values: anything gcc/clang's -fsanitize= takes.
+SANITIZE ?= address,undefined
 ifneq ($(strip $(SANITIZE)),)
 HOST_CFLAGS += -fsanitize=$(SANITIZE) -fno-omit-frame-pointer -g
 HOST_LDFLAGS += -fsanitize=$(SANITIZE) -g
@@ -139,7 +141,8 @@ biewlib/sysdep/$(MACHINE)/$(HOST)/3sto3r.o
 endif
 
 HLP_SUBDIRS=tools/biewhlp tools/lzss
-DO_HELP = @ for i in $(HLP_SUBDIRS); do $(MAKE) -C $$i $@ || exit; done
+# tools link -lbiew, so they must inherit the sanitizer flags it was built with
+DO_HELP = @ for i in $(HLP_SUBDIRS); do $(MAKE) -C $$i HOST_CFLAGS="$(HOST_CFLAGS)" HOST_LDFLAGS="$(HOST_LDFLAGS)" $@ || exit; done
 
 all: $(BIEWLIB) $(TARGET)
 biewlib: $(BIEWLIB)
